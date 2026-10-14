@@ -1,0 +1,22 @@
+# Secrets - never commit
+.env
+.streamlit/secrets.toml
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated data (recreate with the scripts)
+data/raw/*
+!data/raw/.gitkeep
+data/*.db
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
