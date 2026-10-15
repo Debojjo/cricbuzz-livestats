@@ -1,0 +1,62 @@
+{
+  "typeMatches": [
+    {
+      "matchType": "International",
+      "seriesMatches": [
+        {
+          "seriesAdWrapper": {
+            "seriesId": 11902,
+            "seriesName": "West Indies tour of India, 2026",
+            "matches": [
+              {
+                "matchInfo": {
+                  "matchId": 151587,
+                  "seriesId": 11902,
+                  "seriesName": "West Indies tour of India, 2026",
+                  "matchDesc": "3rd T20I",
+                  "matchFormat": "T20",
+                  "startDate": "1791725400000",
+                  "endDate": "1791738000000",
+                  "state": "Complete",
+                  "status": "India won by 14 runs",
+                  "team1": {
+                    "teamId": 2,
+                    "teamName": "India",
+                    "teamSName": "IND"
+                  },
+                  "team2": {
+                    "teamId": 10,
+                    "teamName": "West Indies",
+                    "teamSName": "WI"
+                  },
+                  "venueInfo": {
+                    "id": 152,
+                    "ground": "Holkar Stadium",
+                    "city": "Indore"
+                  },
+                  "stateTitle": "IND Won"
+                },
+                "matchScore": {
+                  "team1Score": {
+                    "inngs1": {
+                      "runs": 223,
+                      "wickets": 10,
+                      "overs": 19.6
+                    }
+                  },
+                  "team2Score": {
+                    "inngs1": {
+                      "runs": 209,
+                      "wickets": 7,
+                      "overs": 19.6
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

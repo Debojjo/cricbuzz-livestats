@@ -1,0 +1,249 @@
+{
+  "list": [
+    {
+      "teamName": "Test Teams"
+    },
+    {
+      "teamId": 2,
+      "teamName": "India",
+      "teamSName": "IND",
+      "imageId": 776162,
+      "countryName": "India"
+    },
+    {
+      "teamId": 96,
+      "teamName": "Afghanistan",
+      "teamSName": "AFG",
+      "imageId": 776177
+    },
+    {
+      "teamId": 27,
+      "teamName": "Ireland",
+      "teamSName": "IRE",
+      "imageId": 839366
+    },
+    {
+      "teamId": 3,
+      "teamName": "Pakistan",
+      "teamSName": "PAK",
+      "imageId": 776308,
+      "countryName": "Pakistan"
+    },
+    {
+      "teamId": 4,
+      "teamName": "Australia",
+      "teamSName": "AUS",
+      "imageId": 776202,
+      "countryName": "Australia"
+    },
+    {
+      "teamId": 5,
+      "teamName": "Sri Lanka",
+      "teamSName": "SL",
+      "imageId": 776254,
+      "countryName": "Sri Lanka"
+    },
+    {
+      "teamId": 6,
+      "teamName": "Bangladesh",
+      "teamSName": "BAN",
+      "imageId": 776210
+    },
+    {
+      "teamId": 9,
+      "teamName": "England",
+      "teamSName": "ENG",
+      "imageId": 776237
+    },
+    {
+      "teamId": 10,
+      "teamName": "West Indies",
+      "teamSName": "WI",
+      "imageId": 776191
+    },
+    {
+      "teamId": 11,
+      "teamName": "South Africa",
+      "teamSName": "RSA",
+      "imageId": 776287
+    },
+    {
+      "teamId": 12,
+      "teamName": "Zimbabwe",
+      "teamSName": "ZIM",
+      "imageId": 776198,
+      "countryName": "Zimbabwe"
+    },
+    {
+      "teamId": 13,
+      "teamName": "New Zealand",
+      "teamSName": "NZ",
+      "imageId": 776333
+    },
+    {
+      "teamName": "Associate Teams"
+    },
+    {
+      "teamId": 71,
+      "teamName": "Malaysia",
+      "teamSName": "MLY",
+      "imageId": 776319
+    },
+    {
+      "teamId": 72,
+      "teamName": "Nepal",
+      "teamSName": "NEP",
+      "imageId": 776331
+    },
+    {
+      "teamId": 77,
+      "teamName": "Germany",
+      "teamSName": "GER",
+      "imageId": 776260
+    },
+    {
+      "teamId": 161,
+      "teamName": "Namibia",
+      "teamSName": "NAM",
+      "imageId": 776326
+    },
+    {
+      "teamId": 185,
+      "teamName": "Denmark",
+      "teamSName": "DEN",
+      "imageId": 776232
+    },
+    {
+      "teamId": 190,
+      "teamName": "Singapore",
+      "teamSName": "SIN",
+      "imageId": 776275
+    },
+    {
+      "teamId": 287,
+      "teamName": "Papua New Guinea",
+      "teamSName": "PNG",
+      "imageId": 776304
+    },
+    {
+      "teamId": 298,
+      "teamName": "Kuwait",
+      "teamSName": "KUW",
+      "imageId": 776312
+    },
+    {
+      "teamId": 300,
+      "teamName": "Vanuatu",
+      "teamSName": "VAN",
+      "imageId": 776229
+    },
+    {
+      "teamId": 303,
+      "teamName": "Jersey",
+      "teamSName": "JER",
+      "imageId": 776300
+    },
+    {
+      "teamId": 304,
+      "teamName": "Oman",
+      "teamSName": "OMAN",
+      "imageId": 776328
+    },
+    {
+      "teamId": 343,
+      "teamName": "Fiji",
+      "teamSName": "FIJI",
+      "imageId": 776251
+    },
+    {
+      "teamId": 527,
+      "teamName": "Italy",
+      "teamSName": "ITA",
+      "imageId": 776295
+    },
+    {
+      "teamId": 529,
+      "teamName": "Botswana",
+      "teamSName": "BW",
+      "imageId": 776225
+    },
+    {
+      "teamId": 541,
+      "teamName": "Belgium",
+      "teamSName": "BEL",
+      "imageId": 776219
+    },
+    {
+      "teamId": 675,
+      "teamName": "Iran",
+      "teamSName": "IRN",
+      "imageId": 776282
+    },
+    {
+      "teamId": 44,
+      "teamName": "Uganda",
+      "teamSName": "UGA",
+      "imageId": 776233
+    },
+    {
+      "teamId": 7,
+      "teamName": "United Arab Emirates",
+      "teamSName": "UAE",
+      "imageId": 776242
+    },
+    {
+      "teamId": 8,
+      "teamName": "Hong Kong, China",
+      "teamSName": "HKC",
+      "imageId": 776271
+    },
+    {
+      "teamId": 14,
+      "teamName": "Kenya",
+      "teamSName": "KEN",
+      "imageId": 776303
+    },
+    {
+      "teamId": 15,
+      "teamName": "United States of America",
+      "teamSName": "USA",
+      "imageId": 776186,
+      "countryName": "United States of America"
+    },
+    {
+      "teamId": 23,
+      "teamName": "Scotland",
+      "teamSName": "SCO",
+      "imageId": 776280
+    },
+    {
+      "teamId": 24,
+      "teamName": "Netherlands",
+      "teamSName": "NED",
+      "imageId": 776335
+    },
+    {
+      "teamId": 25,
+      "teamName": "Bermuda",
+      "teamSName": "BER",
+      "imageId": 776221
+    },
+    {
+      "teamId": 26,
+      "teamName": "Canada",
+      "teamSName": "CAN",
+      "imageId": 776227
+    },
+    {
+      "teamId": 3433,
+      "teamName": "Uzbekistan",
+      "teamSName": "UZ",
+      "imageId": 1011873,
+      "countryName": "Uzbekistan"
+    }
+  ],
+  "appIndex": {
+    "seoTitle": "Live cricket scores, schedule, news, archive, series | Cricbuzz.com",
+    "webURL": "www.cricbuzz.com/cricket-team/"
+  }
+}

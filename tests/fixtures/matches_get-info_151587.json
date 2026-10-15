@@ -1,0 +1,30 @@
+{
+  "matchid": 151587,
+  "seriesid": 11902,
+  "seriesname": "West Indies tour of India, 2026",
+  "matchdesc": "3rd T20I",
+  "matchformat": "T20",
+  "startdate": 1791725400000,
+  "state": "Complete",
+  "status": "West Indies opt to bowl",
+  "team1": {
+    "teamid": 2,
+    "teamname": "India",
+    "teamsname": "IND"
+  },
+  "team2": {
+    "teamid": 10,
+    "teamname": "West Indies",
+    "teamsname": "WI"
+  },
+  "venueinfo": {
+    "id": 152,
+    "ground": "Holkar Stadium",
+    "city": "Indore",
+    "country": "India"
+  },
+  "tossstatus": "West Indies opt to bowl",
+  "shortstatus": "IND won",
+  "matchtype": "International",
+  "hidescorestatus": "Match completed"
+}
