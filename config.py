@@ -35,6 +35,9 @@ API_MAX_RETRIES = 2
 # (limit - reserve) so a bug can never burn the whole quota.
 API_MONTHLY_LIMIT = 200
 API_SAFETY_RESERVE = 20
+# Requests already used before call logging started (read it from the RapidAPI
+# dashboard: percent used x 200). Counted on top of the calls we log ourselves.
+API_CALLS_OFFSET = int(os.getenv("API_CALLS_OFFSET", "14"))
 
 # --- Caching -----------------------------------------------------------------
 RAW_DIR = BASE_DIR / "data" / "raw"
