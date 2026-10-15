@@ -132,15 +132,68 @@ def load_fixtures(db_path: Optional[Path] = None, fixture_dir: Path = FIXTURE_DI
     return summary
 
 
+LIVE_STEPS = (
+    "recent",
+    "series",
+    "scorecards",
+    "info",
+    "venues",
+    "players",
+    "records",
+)
+
+
+def run_live(args) -> None:
+    """Dispatch one live step (dry run unless --confirm)."""
+    from api.cricbuzz_client import CricbuzzClient
+    from data import live_steps as steps
+
+    db = init_db()
+    client = CricbuzzClient()
+    step = args.live
+    if step == "recent":
+        tasks = steps.plan_recent()
+    elif step == "series":
+        tasks = steps.plan_series(args.year)
+    elif step == "scorecards":
+        tasks = steps.plan_scorecards(db, args.limit)
+    elif step == "info":
+        tasks = steps.plan_match_info(db, client, args.limit)
+    elif step == "venues":
+        tasks = steps.plan_venues(db, client, args.limit)
+    elif step == "players":
+        ids = [int(x) for x in args.ids.split(",")] if args.ids else None
+        tasks = steps.plan_players(db, args.limit, ids, not args.no_bowling)
+    else:
+        tasks = steps.plan_records(args.stats_type, args.match_type)
+    steps.run_tasks(client, db, tasks, args.confirm)
+
+
 def main() -> None:
     """Command-line entry point."""
     parser = argparse.ArgumentParser(description="Load JSON into the database.")
     parser.add_argument(
         "--fixtures", action="store_true", help="load saved samples (no API calls)"
     )
+    parser.add_argument("--live", choices=LIVE_STEPS, help="fetch from the API")
+    parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="really spend API calls (default: dry run)",
+    )
+    parser.add_argument("--limit", type=int, default=5, help="how many items")
+    parser.add_argument("--year", type=int, default=2024, help="series year")
+    parser.add_argument("--ids", default="", help="player ids, comma separated")
+    parser.add_argument("--no-bowling", action="store_true", help="skip bowling table")
+    parser.add_argument("--stats-type", default="mostRuns", help="records statsType")
+    parser.add_argument("--match-type", default="2", help="records matchType 1/2/3")
     args = parser.parse_args()
+
+    if args.live:
+        run_live(args)
+        return
     if not args.fixtures:
-        parser.error("choose a mode: --fixtures (live fetching arrives in Part B)")
+        parser.error("choose a mode: --fixtures or --live STEP")
 
     init_db()
     summary = load_fixtures()

@@ -648,3 +648,105 @@ def parse_scorecard(payload: dict, match_id: int, teams: list) -> dict:
         "partnerships": partnerships,
         "unresolved_fielders": unresolved,
     }
+
+
+# ------------------------------------------------- series and leaderboards ----
+def parse_series_archives(payload: dict) -> list:
+    """series/archives: groups by year, each with a list of series.
+
+    The response has no host country, match type or match count, so those
+    series columns stay empty (NULL) until another source fills them in.
+    """
+    data = lower_keys(payload)
+    series = []
+    for group in data.get("seriesmapproto") or []:
+        for item in group.get("series") or []:
+            series_id = to_int(item.get("id"))
+            if series_id is None:
+                continue
+            series.append(
+                {
+                    "series_id": series_id,
+                    "series_name": clean_text(item.get("name")),
+                    "start_date": epoch_ms_to_date(item.get("startdt")),
+                    "end_date": epoch_ms_to_date(item.get("enddt")),
+                }
+            )
+    return series
+
+
+MATCH_TYPE_IDS = {"1": "TEST", "2": "ODI", "3": "T20"}
+_BOWLING_STATS = {
+    "mostWickets",
+    "lowestAvg",
+    "bestBowlingInnings",
+    "mostFiveWickets",
+    "lowestEcon",
+    "lowestSr",
+}
+_BATTING_RECORD_COLUMNS = {
+    "M": ("matches_played", to_int),
+    "I": ("innings", to_int),
+    "R": ("runs", to_int),
+    "RUNS": ("runs", to_int),
+    "SR": ("strike_rate", to_float),
+    "AVG": ("batting_avg", to_float),
+    "HS": ("highest_score", to_int),
+    "HIGHEST": ("highest_score", to_int),
+    "SCORE": ("highest_score", to_int),
+    "100S": ("centuries", to_int),
+    "50S": ("fifties", to_int),
+}
+_BOWLING_RECORD_COLUMNS = {
+    "M": ("matches_played", to_int),
+    "I": ("innings", to_int),
+    "W": ("wickets", to_int),
+    "WKTS": ("wickets", to_int),
+    "AVG": ("bowling_avg", to_float),
+    "ECON": ("economy_rate", to_float),
+}
+_SELECTED_NAMES = {"1": "test", "2": "odi", "3": "t20"}
+
+
+def parse_records_stats(payload: dict, stats_type: str, match_type: str) -> dict:
+    """stats/topstats leaderboard -> rows for player_career_stats.
+
+    Returns {'rows': [...], 'names': {player_id: name}, 'recognized': [...],
+    'ignored': [...]}. Refuses to continue if the API answered for a different
+    match type than the one we asked for, so numbers can never be filed under
+    the wrong format.
+    """
+    fmt = MATCH_TYPE_IDS.get(str(match_type))
+    if fmt is None:
+        raise ParseError(f"matchType must be 1, 2 or 3 (got {match_type!r})")
+    selected = str((payload.get("filter") or {}).get("selectedMatchType", "")).lower()
+    if selected and selected != _SELECTED_NAMES[str(match_type)]:
+        raise ParseError(
+            f"records reply is for '{selected}', expected "
+            f"'{_SELECTED_NAMES[str(match_type)]}' - matchType may mean something else"
+        )
+    mapping = (
+        _BOWLING_RECORD_COLUMNS
+        if stats_type in _BOWLING_STATS
+        else _BATTING_RECORD_COLUMNS
+    )
+    recognized, ignored = set(), set()
+    rows, names = [], {}
+    for record in parse_records(payload):
+        row = {"player_id": record["player_id"], "format": fmt}
+        for header, value in record["stats"].items():
+            target = mapping.get(str(header).upper())
+            if target is None:
+                ignored.add(header)
+                continue
+            column, convert = target
+            row[column] = convert(value)
+            recognized.add(header)
+        names[record["player_id"]] = record["name"]
+        rows.append(row)
+    return {
+        "rows": rows,
+        "names": names,
+        "recognized": sorted(recognized),
+        "ignored": sorted(ignored),
+    }

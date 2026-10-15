@@ -12,6 +12,7 @@ Three protections stand between a bug and your 200-calls-a-month quota:
 
 import json
 import re
+import string
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -34,11 +35,29 @@ class BudgetExceeded(ApiError):
     """Raised instead of sending a request that would eat into the reserve."""
 
 
+def split_endpoint(endpoint: str, params: Optional[dict]) -> tuple:
+    """Fill ``{slots}`` in the endpoint from params; the rest become the query.
+
+    'mcenter/v1/{matchId}/scard' + {'matchId': 40381} -> ('mcenter/v1/40381/scard', {})
+    """
+    params = dict(params or {})
+    slots = [name for _, name, _, _ in string.Formatter().parse(endpoint) if name]
+    missing = [name for name in slots if name not in params]
+    if missing:
+        raise ApiError(f"{endpoint}: missing path parameter(s) {missing}")
+    path = endpoint.format(**{name: params[name] for name in slots})
+    query = {k: v for k, v in params.items() if k not in slots}
+    return path.strip("/"), query
+
+
 def cache_filename(endpoint: str, params: Optional[dict] = None) -> str:
-    """'matches/get-info' + {'matchId': 151587} -> 'matches_get-info_151587.json'."""
-    parts = [endpoint.strip("/").replace("/", "_")]
-    for key in sorted(params or {}):
-        parts.append(str(params[key]))
+    """Readable, unique file name for one request.
+
+    'matches/get-info' + {'matchId': 1} -> 'matches_get-info_1.json'
+    'mcenter/v1/{matchId}/scard' + {'matchId': 1} -> 'mcenter_v1_scard_1.json'
+    """
+    base = re.sub(r"/?\{[^}]+\}", "", endpoint).strip("/").replace("/", "_")
+    parts = [base] + [str((params or {})[key]) for key in sorted(params or {})]
     return re.sub(r"[^A-Za-z0-9_.-]", "_", "_".join(parts)) + ".json"
 
 
@@ -87,6 +106,10 @@ class CricbuzzClient:
         """Where the response for this request is (or will be) stored."""
         return self.raw_dir / cache_filename(endpoint, params)
 
+    def is_cached(self, endpoint: str, params: Optional[dict] = None) -> bool:
+        """True when a saved response exists (so the request would cost nothing)."""
+        return self.cache_path(endpoint, params).exists()
+
     def _read_cache(self, path: Path, max_age: Optional[float]) -> Optional[Any]:
         if not path.exists():
             return None
@@ -117,6 +140,7 @@ class CricbuzzClient:
         page passes a short value; historical data uses the default.
         """
         params = params or {}
+        split_endpoint(endpoint, params)  # fail early on a missing path parameter
         path = self.cache_path(endpoint, params)
 
         cached = self._read_cache(path, max_age)
@@ -140,7 +164,8 @@ class CricbuzzClient:
         return payload
 
     def _request(self, endpoint: str, params: dict) -> Any:
-        url = f"{config.API_BASE_URL}/{endpoint.strip('/')}"
+        path, query = split_endpoint(endpoint, params)
+        url = f"{config.API_BASE_URL}/{path}"
         headers = {
             "X-RapidAPI-Key": self.api_key,
             "X-RapidAPI-Host": config.RAPIDAPI_HOST,
@@ -151,7 +176,7 @@ class CricbuzzClient:
                 response = self.session.get(
                     url,
                     headers=headers,
-                    params=params,
+                    params=query,
                     timeout=config.API_TIMEOUT_SECONDS,
                 )
             except (requests.ConnectionError, requests.Timeout) as exc:

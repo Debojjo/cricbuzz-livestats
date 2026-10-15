@@ -69,6 +69,32 @@ def test_cache_filename_matches_the_fixture_naming():
     )
 
 
+def test_path_parameters_fill_the_url_and_the_rest_become_the_query(make_client):
+    client, session = make_client(FakeResponse())
+    client.get("mcenter/v1/{matchId}/scard", {"matchId": 40381, "extra": 1})
+    call = session.calls[0]
+    assert call["url"].endswith("/mcenter/v1/40381/scard")
+    assert call["params"] == {"extra": 1}
+    path = client.cache_path(
+        "mcenter/v1/{matchId}/scard", {"matchId": 40381, "extra": 1}
+    )
+    assert path.name == "mcenter_v1_scard_1_40381.json"
+
+
+def test_missing_path_parameter_fails_before_any_request(make_client):
+    client, session = make_client(FakeResponse())
+    with pytest.raises(ApiError, match="missing path parameter"):
+        client.get("mcenter/v1/{matchId}", {})
+    assert session.calls == []
+
+
+def test_is_cached_reports_saved_responses(make_client):
+    client, _ = make_client(FakeResponse())
+    assert not client.is_cached("matches/v1/recent")
+    client.get("matches/v1/recent")
+    assert client.is_cached("matches/v1/recent")
+
+
 def test_first_call_hits_the_api_second_reads_the_cache(make_client):
     client, session = make_client(FakeResponse(payload={"hello": 1}))
     assert client.get("matches/recent") == {"hello": 1}

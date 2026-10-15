@@ -1,0 +1,35 @@
+{
+  "seriesMapProto": [
+    {
+      "date": "2026",
+      "series": [
+        {
+          "id": 13187,
+          "name": "Afghanistan vs Bangladesh in UAE, 2026",
+          "startDt": "1791504000000",
+          "endDt": "1791849600000",
+          "thumborImageId": 1091643
+        },
+        {
+          "id": 13037,
+          "name": "Sri Lanka tour of Pakistan, 2026",
+          "startDt": "1791504000000",
+          "endDt": "1795219200000",
+          "thumborImageId": 1094065
+        },
+        {
+          "id": 13257,
+          "name": "ICC Men's T20 World Cup Asia Sub Regional Qualifier B 2026",
+          "startDt": "1791417600000",
+          "endDt": "1791936000000",
+          "thumborImageId": 876143,
+          "isDefaultImage": true
+        }
+      ]
+    }
+  ],
+  "appIndex": {
+    "seoTitle": "Current Running Cricket Series - Cricbuzz | Cricbuzz.com",
+    "webURL": "www.cricbuzz.com/cricket-series/"
+  }
+}
