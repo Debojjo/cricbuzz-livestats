@@ -93,6 +93,26 @@ def load_career_batting(conn, payload: dict, player_id: int) -> int:
     return len(rows)
 
 
+def load_team_players(conn, payload: dict, country: Optional[str] = None) -> int:
+    """teams/get-players -> fill player roles, styles and country.
+
+    Fill-only: a value that is already stored (for example from a full player
+    profile) is never replaced, because a squad list is less detailed.
+    """
+    players = parsers.parse_team_players(payload, country)
+    everything = (
+        "full_name",
+        "display_name",
+        "country",
+        "playing_role",
+        "batting_style",
+        "bowling_style",
+    )
+    for player in players:
+        repo.upsert(conn, "players", player, prefer_existing=everything)
+    return len(players)
+
+
 def load_scorecard(conn, payload: dict, match_id: int) -> dict:
     """matches/get-scorecard-v2 -> batting, bowling, fielding, partnerships.
 
@@ -142,6 +162,7 @@ LIVE_STEPS = (
     "top-batters",
     "records",
     "raw",
+    "team-players",
 )
 
 
@@ -166,6 +187,8 @@ def run_live(args) -> None:
     elif step == "players":
         ids = [int(x) for x in args.ids.split(",")] if args.ids else None
         tasks = steps.plan_players(db, args.limit, ids, not args.no_bowling)
+    elif step == "team-players":
+        tasks = steps.plan_team_players(db, args.team_id)
     elif step == "raw":
         params = {}
         for item in args.raw_param:
@@ -197,6 +220,7 @@ def main() -> None:
     parser.add_argument("--no-bowling", action="store_true", help="skip bowling table")
     parser.add_argument("--stats-type", default="mostRuns", help="records statsType")
     parser.add_argument("--match-type", default="2", help="records matchType 1/2/3")
+    parser.add_argument("--team-id", type=int, default=2, help="team for team-players")
     parser.add_argument("--raw-endpoint", default="", help="name from api/endpoints.py")
     parser.add_argument(
         "--raw-param", action="append", default=[], help="key=value (repeatable)"

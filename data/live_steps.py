@@ -245,6 +245,27 @@ def plan_top_batters(db, limit: int, match_type: str = "2") -> list:
     ]
 
 
+def plan_team_players(db, team_id: int) -> list:
+    """teams/get-players for one team: 1 call, fills roles and styles for a squad."""
+    rows = fetch_all(
+        "SELECT country FROM teams WHERE team_id = ?", (team_id,), db_path=db
+    )
+    country = rows[0]["country"] if rows else None
+
+    def handler(db_path, payload, params):
+        with transaction(db_path) as conn:
+            ingest.load_team_players(conn, payload, country)
+
+    return [
+        Task(
+            endpoints.TEAM_PLAYERS,
+            {"teamId": team_id},
+            handler,
+            f"squad of team {team_id} ({country})",
+        )
+    ]
+
+
 def plan_raw(endpoint_name: str, params: dict) -> list:
     """Fetch one endpoint and just save the response (no parsing, no database).
 

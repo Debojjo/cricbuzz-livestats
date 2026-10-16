@@ -300,3 +300,24 @@ def test_substitute_fielders_are_skipped_not_reported():
     parsed = P.parse_scorecard(payload, 1, IRE_USA)
     assert parsed["fielding"] == []
     assert parsed["unresolved_fielders"] == []
+
+
+# ------------------------------------------------------------ team squads ----
+def test_squad_fixture_gets_roles_from_section_headers():
+    players = P.parse_team_players(load("teams_v1_players_2.json"), "India")
+    assert len(players) == 37
+    by_id = {p["player_id"]: p for p in players}
+    assert by_id[576]["playing_role"] == "Batsman"
+    assert by_id[9647]["playing_role"] == "Allrounder"
+    assert by_id[10744]["playing_role"] == "WK-Batsman"
+    assert by_id[9311]["playing_role"] == "Bowler"
+    assert by_id[9311]["bowling_style"] == "Right-arm fast"
+    assert by_id[10744]["bowling_style"] is None  # keepers list no bowling style
+    assert {p["country"] for p in players} == {"India"}
+    assert all(p["player_id"] and p["full_name"] for p in players)
+
+
+def test_squad_headers_are_not_returned_as_players():
+    payload = {"player": [{"name": "BATSMEN"}, {"id": "1", "name": "A"}, {"name": "X"}]}
+    players = P.parse_team_players(payload)
+    assert [p["player_id"] for p in players] == [1]

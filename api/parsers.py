@@ -775,3 +775,46 @@ def parse_records_stats(payload: dict, stats_type: str, match_type: str) -> dict
         "recognized": sorted(recognized),
         "ignored": sorted(ignored),
     }
+
+
+# ------------------------------------------------------------ team squads ----
+_SQUAD_ROLES = {
+    "BATSMEN": "Batsman",
+    "BATSMAN": "Batsman",
+    "ALL ROUNDER": "Allrounder",
+    "ALL ROUNDERS": "Allrounder",
+    "ALLROUNDER": "Allrounder",
+    "WICKET KEEPER": "WK-Batsman",
+    "WICKET KEEPERS": "WK-Batsman",
+    "BOWLER": "Bowler",
+    "BOWLERS": "Bowler",
+}
+
+
+def parse_team_players(payload: dict, country: Optional[str] = None) -> list:
+    """teams/get-players: a flat list where rows without an id are section headers.
+
+    [{'name': 'BATSMEN'}, {'id': '576', 'name': 'Rohit Sharma', ...}, ...]
+    The header in force gives the role; the style fields are copied as they are.
+    """
+    players = []
+    role = None
+    for entry in payload.get("player") or []:
+        player_id = to_int(entry.get("id"))
+        if player_id is None:
+            heading = str(entry.get("name", "")).strip().upper()
+            role = _SQUAD_ROLES.get(heading, role)
+            continue
+        name = clean_text(entry.get("name"))
+        players.append(
+            {
+                "player_id": player_id,
+                "full_name": name or f"Player {player_id}",
+                "display_name": name,
+                "country": country,
+                "playing_role": role,
+                "batting_style": clean_text(entry.get("battingStyle")),
+                "bowling_style": clean_text(entry.get("bowlingStyle")),
+            }
+        )
+    return players

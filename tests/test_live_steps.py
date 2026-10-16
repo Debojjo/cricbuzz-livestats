@@ -262,3 +262,43 @@ def test_raw_step_only_saves_the_response(db):
     ]
     with pytest.raises(ValueError, match="unknown endpoint"):
         steps.plan_raw("nonsense", {})
+
+
+def test_team_players_step_fills_roles_but_never_overwrites_a_profile(db):
+    with transaction(db) as conn:
+        repo.upsert_team(
+            conn,
+            {
+                "team_id": 2,
+                "team_name": "India",
+                "short_name": "IND",
+                "country": "India",
+            },
+        )
+        # Rohit already has a full profile; Bumrah is only a stub from a scorecard.
+        repo.upsert_player(
+            conn,
+            {
+                "player_id": 576,
+                "full_name": "Rohit Gurunath Sharma",
+                "country": "India",
+                "playing_role": "Opening Batsman",
+            },
+        )
+        repo.ensure_player(conn, 9311, "Bumrah")
+    tasks = steps.plan_team_players(db, 2)
+    assert tasks[0].params == {"teamId": 2}
+    client = FakeClient({endpoints.TEAM_PLAYERS: fixture("teams_v1_players_2.json")})
+    steps.run_tasks(client, db, tasks, confirm=True)
+
+    rows = {r["player_id"]: r for r in fetch_all("SELECT * FROM players", db_path=db)}
+    assert len(rows) == 37
+    assert rows[576]["full_name"] == "Rohit Gurunath Sharma"  # kept
+    assert rows[576]["playing_role"] == "Opening Batsman"  # kept
+    assert rows[9311]["playing_role"] == "Bowler"  # filled in
+    assert rows[9311]["country"] == "India"
+    assert rows[9311]["full_name"] == "Bumrah"  # stub name kept, not replaced
+    india = fetch_all(
+        "SELECT COUNT(*) n FROM players WHERE country='India'", db_path=db
+    )
+    assert india[0]["n"] == 37
