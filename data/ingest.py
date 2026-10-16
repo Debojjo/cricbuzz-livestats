@@ -141,6 +141,7 @@ LIVE_STEPS = (
     "players",
     "top-batters",
     "records",
+    "raw",
 )
 
 
@@ -165,6 +166,12 @@ def run_live(args) -> None:
     elif step == "players":
         ids = [int(x) for x in args.ids.split(",")] if args.ids else None
         tasks = steps.plan_players(db, args.limit, ids, not args.no_bowling)
+    elif step == "raw":
+        params = {}
+        for item in args.raw_param:
+            key, _, value = item.partition("=")
+            params[key] = int(value) if value.isdigit() else value
+        tasks = steps.plan_raw(args.raw_endpoint, params)
     elif step == "top-batters":
         tasks = steps.plan_top_batters(db, args.limit, args.match_type)
     else:
@@ -190,6 +197,10 @@ def main() -> None:
     parser.add_argument("--no-bowling", action="store_true", help="skip bowling table")
     parser.add_argument("--stats-type", default="mostRuns", help="records statsType")
     parser.add_argument("--match-type", default="2", help="records matchType 1/2/3")
+    parser.add_argument("--raw-endpoint", default="", help="name from api/endpoints.py")
+    parser.add_argument(
+        "--raw-param", action="append", default=[], help="key=value (repeatable)"
+    )
     args = parser.parse_args()
 
     if args.live:

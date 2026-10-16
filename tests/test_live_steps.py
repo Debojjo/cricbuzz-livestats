@@ -250,3 +250,15 @@ def test_top_batters_step_targets_biggest_scorers_missing_an_average(db):
     assert all(t.endpoint == endpoints.PLAYER_BATTING for t in tasks)
     with pytest.raises(ValueError):
         steps.plan_top_batters(db, limit=3, match_type="9")
+
+
+def test_raw_step_only_saves_the_response(db):
+    tasks = steps.plan_raw("team_players", {"teamId": 2})
+    assert tasks[0].endpoint == endpoints.TEAM_PLAYERS
+    client = FakeClient({endpoints.TEAM_PLAYERS: {"player": []}})
+    summary = steps.run_tasks(client, db, tasks, confirm=True)
+    assert summary["done"] == 1 and client.calls == [
+        (endpoints.TEAM_PLAYERS, {"teamId": 2})
+    ]
+    with pytest.raises(ValueError, match="unknown endpoint"):
+        steps.plan_raw("nonsense", {})

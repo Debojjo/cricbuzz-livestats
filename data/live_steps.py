@@ -245,6 +245,25 @@ def plan_top_batters(db, limit: int, match_type: str = "2") -> list:
     ]
 
 
+def plan_raw(endpoint_name: str, params: dict) -> list:
+    """Fetch one endpoint and just save the response (no parsing, no database).
+
+    Used to look at a response we have no parser for yet, e.g. a team squad.
+    """
+    template = getattr(endpoints, endpoint_name.upper(), None)
+    if not isinstance(template, str):
+        known = [n for n in dir(endpoints) if n.isupper()]
+        raise ValueError(f"unknown endpoint {endpoint_name!r}; choose from {known}")
+    return [
+        Task(
+            template,
+            params,
+            lambda db_path, payload, p: None,
+            f"raw {endpoint_name.upper()} {params}",
+        )
+    ]
+
+
 def plan_records(stats_type: str, match_type: str) -> list:
     """One leaderboard (e.g. mostRuns for ODI = matchType 2): 1 call."""
 
