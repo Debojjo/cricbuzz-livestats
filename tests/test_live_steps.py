@@ -240,3 +240,13 @@ def test_records_for_the_wrong_match_type_are_refused(db):
     summary = steps.run_tasks(client, db, tasks, confirm=True)
     assert summary["errors"] and "expected 'odi'" in summary["errors"][0]
     assert count(db, "player_career_stats") == 0
+
+
+def test_top_batters_step_targets_biggest_scorers_missing_an_average(db):
+    client = FakeClient({endpoints.RECORDS: fixture("stats_get-records_t20.json")})
+    steps.run_tasks(client, db, steps.plan_records("mostRuns", "3"), confirm=True)
+    tasks = steps.plan_top_batters(db, limit=3, match_type="3")
+    assert [t.params["playerId"] for t in tasks] == [8359, 2258, 576]  # by runs
+    assert all(t.endpoint == endpoints.PLAYER_BATTING for t in tasks)
+    with pytest.raises(ValueError):
+        steps.plan_top_batters(db, limit=3, match_type="9")

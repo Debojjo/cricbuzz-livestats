@@ -210,6 +210,41 @@ def plan_players(
     return tasks
 
 
+def plan_top_batters(db, limit: int, match_type: str = "2") -> list:
+    """Career batting for the biggest run-scorers of a format who lack an average.
+
+    Needed for Q3 (top ODI scorers with average and centuries): the leaderboard
+    gives runs only, the batting table adds the rest. 1 call per player.
+    """
+    fmt = parsers.MATCH_TYPE_IDS.get(str(match_type))
+    if fmt is None:
+        raise ValueError("match type must be 1, 2 or 3")
+    rows = fetch_all(
+        """
+        SELECT player_id FROM player_career_stats
+        WHERE format = ? AND runs > 0
+          AND (batting_avg IS NULL OR centuries IS NULL)
+        ORDER BY runs DESC LIMIT ?
+        """,
+        (fmt, limit),
+        db_path=db,
+    )
+
+    def batting(db_path, payload, params):
+        with transaction(db_path) as conn:
+            ingest.load_career_batting(conn, payload, params["playerId"])
+
+    return [
+        Task(
+            endpoints.PLAYER_BATTING,
+            {"playerId": pid},
+            batting,
+            f"top {fmt} batter {pid}",
+        )
+        for pid in _ids(rows, "player_id")
+    ]
+
+
 def plan_records(stats_type: str, match_type: str) -> list:
     """One leaderboard (e.g. mostRuns for ODI = matchType 2): 1 call."""
 

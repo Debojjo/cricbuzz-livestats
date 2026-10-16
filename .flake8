@@ -1,3 +1,6 @@
 [flake8]
 max-line-length = 88
 exclude = venv,.venv,__pycache__
+# The coverage report holds one-line SQL strings that are clearer unwrapped.
+per-file-ignores =
+    data/coverage_report.py:E501

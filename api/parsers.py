@@ -495,17 +495,40 @@ def parse_dismissal(out_desc: Optional[str]) -> Optional[tuple]:
     return None
 
 
-def _resolve_name(name: str, roster: dict) -> Optional[int]:
-    """Find a player id from a (possibly partial) name in a {norm_name: id} roster."""
+def _resolve_name(name: str, roster: list) -> Optional[int]:
+    """Find a player id for a (possibly abbreviated) name.
+
+    roster: [(full_name, player_id), ...] for the fielding side. Tries, in order:
+    exact name, unique prefix/suffix match, then first initial + surname
+    ('P Smith' matches 'Peter Smith'). Ambiguous or unknown names return None.
+    """
     key = norm(name)
-    if key in roster:
-        return roster[key]
+    for roster_name, player_id in roster:
+        if norm(roster_name) == key:
+            return player_id
+
     hits = {
         pid
-        for rname, pid in roster.items()
-        if rname.endswith(key) or key.endswith(rname)
+        for roster_name, pid in roster
+        if norm(roster_name).endswith(key) or key.endswith(norm(roster_name))
     }
-    return hits.pop() if len(hits) == 1 else None
+    if len(hits) == 1:
+        return hits.pop()
+
+    parts = name.split()
+    if len(parts) >= 2:
+        initial, surname = parts[0][0].lower(), norm(parts[-1])
+        hits = {
+            pid
+            for roster_name, pid in roster
+            if roster_name.split()
+            and len(roster_name.split()) >= 2
+            and roster_name.split()[0][0].lower() == initial
+            and norm(roster_name.split()[-1]) == surname
+        }
+        if len(hits) == 1:
+            return hits.pop()
+    return None
 
 
 def parse_scorecard(payload: dict, match_id: int, teams: list) -> dict:
@@ -542,7 +565,7 @@ def parse_scorecard(payload: dict, match_id: int, teams: list) -> dict:
 
     players: dict = {}
     batting, bowling, partnerships = [], [], []
-    rosters: dict = {}  # team_id -> {norm_name: player_id}
+    rosters: dict = {}  # team_id -> [(full_name, player_id), ...]
 
     for inn in innings_list:
         bat_team = team_for(inn)
@@ -555,7 +578,7 @@ def parse_scorecard(payload: dict, match_id: int, teams: list) -> dict:
                 continue
             name = clean_text(b.get("name"))
             players[pid] = name
-            rosters.setdefault(bat_team, {})[norm(name)] = pid
+            rosters.setdefault(bat_team, []).append((name or "", pid))
             out_desc = clean_text(b.get("outdec"))
             balls = to_int(b.get("balls")) or 0
             if not out_desc and balls == 0:
@@ -583,7 +606,7 @@ def parse_scorecard(payload: dict, match_id: int, teams: list) -> dict:
                 continue
             name = clean_text(w.get("name"))
             players[pid] = players.get(pid) or name
-            rosters.setdefault(bowl_team, {})[norm(name)] = pid
+            rosters.setdefault(bowl_team, []).append((name or "", pid))
             overs = clean_text(w.get("overs"))
             balls = overs_to_balls(overs)
             if balls is None:
@@ -630,7 +653,9 @@ def parse_scorecard(payload: dict, match_id: int, teams: list) -> dict:
             if not parsed:
                 continue
             kind, fielder = parsed
-            pid = _resolve_name(fielder, rosters.get(bowl_team, {}))
+            if fielder.lower().startswith("(sub)"):
+                continue  # substitutes are not in any team list
+            pid = _resolve_name(fielder, rosters.get(bowl_team, []))
             if pid is None:
                 unresolved.append(fielder)
                 continue

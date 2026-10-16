@@ -139,6 +139,7 @@ LIVE_STEPS = (
     "info",
     "venues",
     "players",
+    "top-batters",
     "records",
 )
 
@@ -164,6 +165,8 @@ def run_live(args) -> None:
     elif step == "players":
         ids = [int(x) for x in args.ids.split(",")] if args.ids else None
         tasks = steps.plan_players(db, args.limit, ids, not args.no_bowling)
+    elif step == "top-batters":
+        tasks = steps.plan_top_batters(db, args.limit, args.match_type)
     else:
         tasks = steps.plan_records(args.stats_type, args.match_type)
     steps.run_tasks(client, db, tasks, args.confirm)

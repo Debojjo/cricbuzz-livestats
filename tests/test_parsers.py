@@ -248,3 +248,55 @@ def test_bad_scorecards_raise_parse_error():
                 {"team_id": 2, "team_name": "B", "short_name": "B"},
             ],
         )
+
+
+# ------------------------------------------------- fielder name matching ----
+ROSTER = [("Pichet Jirapatananukul", 5), ("Aslam Khan", 6), ("Imran Khan", 7)]
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("Pichet Jirapatananukul", 5),  # exact
+        ("P Jirapatananukul", 5),  # initial + surname
+        ("Aslam Khan", 6),
+        ("Khan", None),  # ambiguous: two Khans
+        ("Nobody Known", None),
+    ],
+)
+def test_resolve_fielder_names(name, expected):
+    assert P._resolve_name(name, ROSTER) == expected
+
+
+def test_substitute_fielders_are_skipped_not_reported():
+    payload = {
+        "scorecard": [
+            {
+                "inningsid": 1,
+                "batteamsname": "IRE",
+                "batsman": [
+                    {
+                        "id": 1,
+                        "name": "A Bat",
+                        "runs": 5,
+                        "balls": 4,
+                        "outdec": "c (sub)Ravi Bishnoi b Zed Bowl",
+                        "strkrate": "125",
+                    },
+                ],
+                "bowler": [
+                    {
+                        "id": 2,
+                        "name": "Zed Bowl",
+                        "overs": "1",
+                        "runs": 5,
+                        "wickets": 1,
+                    },
+                ],
+                "partnership": {"partnership": []},
+            }
+        ]
+    }
+    parsed = P.parse_scorecard(payload, 1, IRE_USA)
+    assert parsed["fielding"] == []
+    assert parsed["unresolved_fielders"] == []
