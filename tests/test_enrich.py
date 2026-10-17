@@ -70,3 +70,27 @@ def test_enrich_series_fills_only_empty_fields(tmp_path):
     assert rows[1]["host_country"] == "Pakistan"
     assert rows[2]["host_country"] == "China"  # existing value untouched
     assert rows[1]["match_type"] is None  # nothing in the name -> not guessed
+
+
+def test_batting_styles_get_one_spelling(tmp_path):
+    db = init_db(tmp_path / "styles.db")
+    with transaction(db) as conn:
+        for pid, style in enumerate(
+            [
+                "Right Handed Bat",
+                "Right-hand bat",
+                "Left Handed Bat",
+                None,
+                "Switch hitter",
+            ],
+            start=1,
+        ):
+            repo.upsert_player(
+                conn, {"player_id": pid, "full_name": f"P{pid}", "batting_style": style}
+            )
+        assert enrich.normalize_player_styles(conn) == 2
+        assert enrich.normalize_player_styles(conn) == 0  # safe to repeat
+    rows = fetch_all("SELECT batting_style FROM players ORDER BY player_id", db_path=db)
+    assert [r["batting_style"] for r in rows] == [
+        "Right-hand bat", "Right-hand bat", "Left-hand bat", None, "Switch hitter",
+    ]  # fmt: skip

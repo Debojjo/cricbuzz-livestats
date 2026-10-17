@@ -380,6 +380,23 @@ def parse_teams_list(payload: dict) -> list:
     return teams
 
 
+def normalize_batting_style(value: Any) -> Optional[str]:
+    """'Right Handed Bat' (profile) and 'Right-hand bat' (squad) -> 'Right-hand bat'.
+
+    The two endpoints spell the same thing differently; storing one spelling keeps
+    GROUP BY and filters from splitting players into two groups.
+    """
+    text = clean_text(value)
+    if text is None:
+        return None
+    key = norm(text)
+    if key in ("righthandedbat", "righthandbat"):
+        return "Right-hand bat"
+    if key in ("lefthandedbat", "lefthandbat"):
+        return "Left-hand bat"
+    return text
+
+
 def parse_player_info(payload: dict) -> dict:
     """players/get-info -> a row for the players table."""
     player_id = to_int(payload.get("id"))
@@ -392,7 +409,7 @@ def parse_player_info(payload: dict) -> dict:
         "display_name": name,
         "country": clean_text(payload.get("intlTeam")),
         "playing_role": clean_text(payload.get("role")),
-        "batting_style": clean_text(payload.get("bat")),
+        "batting_style": normalize_batting_style(payload.get("bat")),
         "bowling_style": clean_text(payload.get("bowl")),
         "date_of_birth": parse_long_date(payload.get("DoBFormat")),
         "birth_place": clean_text(payload.get("birthPlace")),
@@ -813,7 +830,7 @@ def parse_team_players(payload: dict, country: Optional[str] = None) -> list:
                 "display_name": name,
                 "country": country,
                 "playing_role": role,
-                "batting_style": clean_text(entry.get("battingStyle")),
+                "batting_style": normalize_batting_style(entry.get("battingStyle")),
                 "bowling_style": clean_text(entry.get("bowlingStyle")),
             }
         )

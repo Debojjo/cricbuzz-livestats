@@ -72,3 +72,57 @@ def test_format_table_aligns_and_shows_blanks():
     text = query_runner.format_table(["a", "bb"], [(1, None), (22, "x")])
     assert text.splitlines()[0].startswith("a ")
     assert "22" in text
+
+
+# ------------------------------------------------------------------- Q2 ----
+def _days_ago(n):
+    from datetime import date, timedelta
+
+    return (date.today() - timedelta(days=n)).isoformat()
+
+
+def _q2_world(db):
+    with transaction(db) as conn:
+        repo.upsert_team(conn, {"team_id": 1, "team_name": "India"})
+        repo.upsert_team(conn, {"team_id": 2, "team_name": "Wales"})
+        repo.upsert_venue(
+            conn, {"venue_id": 1, "venue_name": "Holkar Stadium", "city": "Indore"}
+        )
+        repo.upsert_venue(conn, {"venue_id": 2, "venue_name": "Nowhere Oval"})
+        base = {"format": "T20", "team1_id": 1, "team2_id": 2, "state": "Complete"}
+        rows = [
+            (1, "yesterday", _days_ago(1), 1, "Complete"),
+            (2, "ten days ago", _days_ago(10), 2, "Complete"),
+            (3, "exactly 30 days", _days_ago(30), 1, "Complete"),
+            (4, "too old", _days_ago(31), 1, "Complete"),
+            (5, "future fixture", _days_ago(-3), 1, "Complete"),
+            (6, "still live", _days_ago(0), 1, "In Progress"),
+            (7, "no venue", _days_ago(5), None, "Complete"),
+        ]
+        for match_id, desc, day, venue, state in rows:
+            repo.upsert_match(
+                conn,
+                {**base, "match_id": match_id, "match_desc": desc,
+                 "match_date": day, "venue_id": venue, "state": state},
+            )  # fmt: skip
+
+
+def test_q2_returns_only_played_matches_from_the_last_30_days(db):
+    _q2_world(db)
+    descs = [row[0] for row in query_runner.run_query(2, db)["rows"]]
+    assert descs == ["yesterday", "no venue", "ten days ago", "exactly 30 days"]
+
+
+def test_q2_venue_text_and_missing_venue(db):
+    _q2_world(db)
+    rows = {r[0]: r for r in query_runner.run_query(2, db)["rows"]}
+    assert rows["yesterday"][3] == "Holkar Stadium, Indore"
+    assert rows["ten days ago"][3] == "Nowhere Oval"  # no city -> no dangling comma
+    assert rows["no venue"][3] == "Unknown venue"
+
+
+def test_q2_is_newest_first_and_uses_the_date_index(db):
+    _q2_world(db)
+    dates = [row[4] for row in query_runner.run_query(2, db)["rows"]]
+    assert dates == sorted(dates, reverse=True)
+    assert "idx_matches_date" in " ".join(query_runner.explain(2, db))

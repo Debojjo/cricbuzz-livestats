@@ -321,3 +321,26 @@ def test_squad_headers_are_not_returned_as_players():
     payload = {"player": [{"name": "BATSMEN"}, {"id": "1", "name": "A"}, {"name": "X"}]}
     players = P.parse_team_players(payload)
     assert [p["player_id"] for p in players] == [1]
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("Right Handed Bat", "Right-hand bat"),
+        ("Right-hand bat", "Right-hand bat"),
+        ("Left Handed Bat", "Left-hand bat"),
+        ("left-hand bat", "Left-hand bat"),
+        ("", None),
+        (None, None),
+        ("Switch hitter", "Switch hitter"),
+    ],
+)
+def test_batting_style_is_normalised(raw, expected):
+    assert P.normalize_batting_style(raw) == expected
+
+
+def test_profile_and_squad_agree_on_the_batting_style_spelling():
+    profile = P.parse_player_info(load("players_get-info_6635.json"))
+    assert profile["batting_style"] == "Left-hand bat"  # Khawaja: 'Left Handed Bat'
+    squad = P.parse_team_players(load("teams_v1_players_2.json"))
+    assert {p["batting_style"] for p in squad} == {"Right-hand bat", "Left-hand bat"}

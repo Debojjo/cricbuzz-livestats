@@ -108,13 +108,29 @@ def enrich_series(conn) -> dict:
     return filled
 
 
+def normalize_player_styles(conn) -> int:
+    """Rewrite stored batting styles to the single spelling used everywhere."""
+    cursor = conn.execute("""
+        UPDATE players SET batting_style = CASE
+            WHEN lower(replace(batting_style, '-', ' ')) IN
+                 ('right handed bat', 'right hand bat') THEN 'Right-hand bat'
+            ELSE 'Left-hand bat' END
+        WHERE lower(replace(batting_style, '-', ' ')) IN
+              ('right handed bat', 'right hand bat', 'left handed bat', 'left hand bat')
+          AND batting_style NOT IN ('Right-hand bat', 'Left-hand bat')
+        """)
+    return cursor.rowcount
+
+
 def main() -> None:
     """Command-line entry point."""
     init_db()
     with transaction() as conn:
         venues = load_venues_extra(conn)
         filled = enrich_series(conn)
+        restyled = normalize_player_styles(conn)
     print(f"\nManual venues loaded: {venues}")
+    print(f"Batting styles standardised: {restyled}")
     print(f"Series fields filled: {filled}")
 
 
