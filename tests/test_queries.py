@@ -126,3 +126,140 @@ def test_q2_is_newest_first_and_uses_the_date_index(db):
     dates = [row[4] for row in query_runner.run_query(2, db)["rows"]]
     assert dates == sorted(dates, reverse=True)
     assert "idx_matches_date" in " ".join(query_runner.explain(2, db))
+
+
+# --------------------------------------------------------------- Q3 - Q8 ----
+def _player(conn, pid, name, **extra):
+    repo.upsert_player(conn, {"player_id": pid, "full_name": name, **extra})
+
+
+def test_q3_top_ten_odi_scorers_only(db):
+    with transaction(db) as conn:
+        for i in range(1, 13):
+            _player(conn, i, f"Batter {i:02d}")
+            repo.upsert_career_stats(
+                conn,
+                {"player_id": i, "format": "ODI", "runs": 1000 * i,
+                 "batting_avg": 40.0 + i, "centuries": i},
+            )  # fmt: skip
+        repo.upsert_career_stats(conn, {"player_id": 1, "format": "T20", "runs": 99999})
+        repo.upsert_career_stats(conn, {"player_id": 2, "format": "ODI", "runs": 0})
+        # a tie for 10th place is broken by name, so the result is repeatable
+        _player(conn, 20, "Aaron Tie")
+        repo.upsert_career_stats(conn, {"player_id": 20, "format": "ODI", "runs": 3000})
+    result = query_runner.run_query(3, db)
+    names = [r[0] for r in result["rows"]]
+    assert len(names) == 10
+    assert names[:3] == ["Batter 12", "Batter 11", "Batter 10"]
+    # two players tie on 3000 runs for the last place: the name decides, so the
+    # answer is the same every time
+    assert names[-1] == "Aaron Tie" and "Batter 03" not in names
+    assert "Batter 01" not in names  # its T20 total must not leak in
+    assert result["columns"] == [
+        "player_name",
+        "total_runs",
+        "batting_avg",
+        "centuries",
+    ]
+
+
+def test_q3_keeps_players_whose_average_is_unknown(db):
+    with transaction(db) as conn:
+        _player(conn, 1, "No Average")
+        repo.upsert_career_stats(conn, {"player_id": 1, "format": "ODI", "runs": 500})
+    assert query_runner.run_query(3, db)["rows"] == [("No Average", 500, None, None)]
+
+
+def test_q4_only_venues_strictly_above_50000_largest_first(db):
+    with transaction(db) as conn:
+        for vid, name, cap in [
+            (1, "Big", 132000), (2, "Edge", 50000), (3, "Mid", 50001),
+            (4, "Small", 20000), (5, "Unknown", None),
+        ]:  # fmt: skip
+            repo.upsert_venue(
+                conn,
+                {"venue_id": vid, "venue_name": name, "city": "C", "country": "X",
+                 "capacity": cap},
+            )  # fmt: skip
+    rows = query_runner.run_query(4, db)["rows"]
+    assert [r[0] for r in rows] == ["Big", "Mid"]
+    assert rows[0] == ("Big", "C", "X", 132000)
+
+
+def test_q5_counts_wins_per_team_ignoring_matches_without_a_winner(db):
+    with transaction(db) as conn:
+        for tid, name in [(1, "India"), (2, "Wales"), (3, "Idle"), (4, "India")]:
+            repo.upsert_team(conn, {"team_id": tid, "team_name": name})
+        plan = [(1, 1, 2, 1), (2, 1, 2, 1), (3, 2, 1, 2), (4, 1, 2, None), (5, 4, 2, 4)]
+        for mid, a, b, winner in plan:
+            repo.upsert_match(
+                conn,
+                {"match_id": mid, "format": "T20", "team1_id": a, "team2_id": b,
+                 "winner_id": winner},
+            )  # fmt: skip
+    rows = query_runner.run_query(5, db)["rows"]
+    assert rows == [("India", 2), ("India", 1), ("Wales", 1)]  # two different Indias
+    assert all(r[0] != "Idle" for r in rows)
+
+
+def test_q6_counts_roles_and_shows_unknown_instead_of_hiding_it(db):
+    with transaction(db) as conn:
+        roles = ["Batsman", "Batsman", "Bowler", None, None, None]
+        for i, role in enumerate(roles, start=1):
+            _player(conn, i, f"P{i}", playing_role=role)
+    rows = query_runner.run_query(6, db)["rows"]
+    assert rows == [("Unknown", 3), ("Batsman", 2), ("Bowler", 1)]
+    assert sum(r[1] for r in rows) == 6  # totals add up to all players
+
+
+def test_q7_best_score_per_format_with_ties_and_labels(db):
+    with transaction(db) as conn:
+        for pid, name in [(1, "Alpha"), (2, "Beta"), (3, "Gamma")]:
+            _player(conn, pid, name)
+        data = [
+            (1, "TEST", 400), (2, "TEST", 380), (1, "ODI", 264), (2, "ODI", 264),
+            (3, "T20", 172), (1, "T20", 100),
+        ]  # fmt: skip
+        for pid, fmt, score in data:
+            repo.upsert_career_stats(
+                conn, {"player_id": pid, "format": fmt, "highest_score": score}
+            )
+    assert query_runner.run_query(7, db)["rows"] == [
+        ("Test", 400, "Alpha"),
+        ("ODI", 264, "Alpha"),
+        ("ODI", 264, "Beta"),  # tie: both named
+        ("T20I", 172, "Gamma"),
+    ]
+
+
+def test_q8_selects_exactly_the_calendar_year_2024(db):
+    with transaction(db) as conn:
+        rows = [
+            (1, "Ended 2023", "2023-12-31", None),
+            (2, "Opens 2024", "2024-01-01", "India"),
+            (3, "Closes 2024", "2024-12-31", None),
+            (4, "Starts 2025", "2025-01-01", None),
+            (5, "No date", None, None),
+        ]
+        for sid, name, start, host in rows:
+            repo.upsert_series(
+                conn,
+                {"series_id": sid, "series_name": name, "start_date": start,
+                 "host_country": host},
+            )  # fmt: skip
+    rows = query_runner.run_query(8, db)["rows"]
+    assert [r[0] for r in rows] == ["Opens 2024", "Closes 2024"]
+    assert rows[0][1] == "India" and rows[1][1] == "Not stated"
+    assert rows[1][2] == "Not stated" and rows[1][4] is None
+
+
+def test_beginner_queries_use_their_indexes(db):
+    assert "idx_career_format" in " ".join(query_runner.explain(3, db))
+    assert "idx_venues_capacity" in " ".join(query_runner.explain(4, db))
+    assert "idx_series_start" in " ".join(query_runner.explain(8, db))
+
+
+def test_run_all_reports_every_query(db):
+    results = query_runner.run_all(db)
+    assert [r[0] for r in results][:8] == list(range(1, 9))
+    assert all(r[1] >= 0 for r in results)  # no query raised an error

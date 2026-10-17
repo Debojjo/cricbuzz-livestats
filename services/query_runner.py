@@ -54,6 +54,25 @@ def explain(number: int, db_path: Optional[Path] = None) -> list:
         conn.close()
 
 
+def run_all(db_path: Optional[Path] = None) -> list:
+    """Run every query file once. Returns [(number, rows, seconds, first plan line)]."""
+    import time
+
+    results = []
+    for path in sorted(QUERY_DIR.glob("q*.sql")):
+        number = int(path.name[1:3])
+        started = time.perf_counter()
+        try:
+            rows = len(run_query(number, db_path)["rows"])
+            plan = explain(number, db_path)
+            results.append((number, rows, time.perf_counter() - started, plan[0]))
+        except (
+            Exception
+        ) as exc:  # report every failure instead of stopping at the first
+            results.append((number, -1, time.perf_counter() - started, f"ERROR: {exc}"))
+    return results
+
+
 def format_table(columns: list, rows: list, limit: Optional[int] = None) -> str:
     """Plain-text table for the terminal."""
     shown = rows if limit is None else rows[:limit]
@@ -73,10 +92,19 @@ def format_table(columns: list, rows: list, limit: Optional[int] = None) -> str:
 def main() -> None:
     """Command-line entry point."""
     parser = argparse.ArgumentParser(description="Run an analytics query.")
-    parser.add_argument("number", type=int, help="question number, 1-25")
+    parser.add_argument("number", type=int, nargs="?", help="question number, 1-25")
+    parser.add_argument("--all", action="store_true", help="run every query, summary")
     parser.add_argument("--plan", action="store_true", help="show the execution plan")
     parser.add_argument("--limit", type=int, default=None, help="rows to print")
     args = parser.parse_args()
+
+    if args.all:
+        print("\nQ  | rows  | seconds | first step of the plan")
+        for number, rows, seconds, plan in run_all():
+            print(f"Q{number:<2}| {rows:>5} | {seconds:>7.3f} | {plan}")
+        return
+    if args.number is None:
+        parser.error("give a question number, or use --all")
 
     result = run_query(args.number)
     print(f"\nQ{args.number}: {find_query_file(args.number).name}\n")
