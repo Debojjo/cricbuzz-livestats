@@ -289,17 +289,13 @@ def plan_records(stats_type: str, match_type: str) -> list:
     """One leaderboard (e.g. mostRuns for ODI = matchType 2): 1 call."""
 
     def handler(db_path, payload, params):
-        parsed = parsers.parse_records_stats(payload, stats_type, match_type)
+        with transaction(db_path) as conn:
+            parsed = ingest.load_records_stats(conn, payload, stats_type, match_type)
         logger.info(
             "records columns used: %s | ignored: %s",
             parsed["recognized"],
             parsed["ignored"],
         )
-        with transaction(db_path) as conn:
-            for pid, name in parsed["names"].items():
-                repo.ensure_player(conn, pid, name)
-            for row in parsed["rows"]:
-                repo.upsert_career_stats(conn, row)
 
     return [
         Task(

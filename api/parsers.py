@@ -748,6 +748,13 @@ _BOWLING_RECORD_COLUMNS = {
     "ECON": ("economy_rate", to_float),
 }
 _SELECTED_NAMES = {"1": "test", "2": "odi", "3": "t20"}
+# These leaderboards list single INNINGS (one player can appear many times, and
+# columns like SR describe that innings, not the career). Only the listed headers
+# are career-level facts, so everything else is ignored.
+_INNINGS_LEVEL_HEADERS = {
+    "highestScore": {"HS", "HIGHEST", "SCORE"},
+    "bestBowlingInnings": set(),
+}
 
 
 def parse_records_stats(payload: dict, stats_type: str, match_type: str) -> dict:
@@ -774,11 +781,12 @@ def parse_records_stats(payload: dict, stats_type: str, match_type: str) -> dict
     )
     recognized, ignored = set(), set()
     rows, names = [], {}
+    only = _INNINGS_LEVEL_HEADERS.get(stats_type)
     for record in parse_records(payload):
         row = {"player_id": record["player_id"], "format": fmt}
         for header, value in record["stats"].items():
             target = mapping.get(str(header).upper())
-            if target is None:
+            if target is None or (only is not None and str(header).upper() not in only):
                 ignored.add(header)
                 continue
             column, convert = target
@@ -786,6 +794,16 @@ def parse_records_stats(payload: dict, stats_type: str, match_type: str) -> dict
             recognized.add(header)
         names[record["player_id"]] = record["name"]
         rows.append(row)
+
+    # A player can appear several times (one row per innings). Keep the best one.
+    best: dict = {}
+    for row in rows:
+        previous = best.get(row["player_id"])
+        if previous is None or (row.get("highest_score") or -1) > (
+            previous.get("highest_score") or -1
+        ):
+            best[row["player_id"]] = row
+    rows = list(best.values())
     return {
         "rows": rows,
         "names": names,

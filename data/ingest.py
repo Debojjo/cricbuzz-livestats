@@ -113,6 +113,16 @@ def load_team_players(conn, payload: dict, country: Optional[str] = None) -> int
     return len(players)
 
 
+def load_records_stats(conn, payload: dict, stats_type: str, match_type: str) -> dict:
+    """stats/topstats leaderboard -> players (names) and player_career_stats rows."""
+    parsed = parsers.parse_records_stats(payload, stats_type, match_type)
+    for player_id, name in parsed["names"].items():
+        repo.ensure_player(conn, player_id, name)
+    for row in parsed["rows"]:
+        repo.upsert_career_stats(conn, row)
+    return parsed
+
+
 def load_scorecard(conn, payload: dict, match_id: int) -> dict:
     """matches/get-scorecard-v2 -> batting, bowling, fielding, partnerships.
 

@@ -447,3 +447,174 @@ def test_q10_reads_the_date_index_instead_of_sorting_everything(db):
     plan = " ".join(query_runner.explain(10, db))
     assert "idx_matches_date" in plan
     assert "TEMP B-TREE FOR ORDER BY" not in plan  # index order is reused
+
+
+# ------------------------------------------------------------- Q14 - Q18 ----
+def _basics(conn, players=()):
+    repo.upsert_team(conn, {"team_id": 1, "team_name": "A"})
+    repo.upsert_team(conn, {"team_id": 2, "team_name": "B"})
+    repo.upsert_venue(conn, {"venue_id": 1, "venue_name": "Oval"})
+    repo.upsert_venue(conn, {"venue_id": 2, "venue_name": "Park"})
+    for pid in players:
+        _player(conn, pid, f"P{pid}")
+
+
+def _match(conn, mid, date="2026-01-01", fmt="ODI", venue=1, **kw):
+    repo.upsert_match(
+        conn,
+        {"match_id": mid, "format": fmt, "match_date": date, "venue_id": venue,
+         "team1_id": 1, "team2_id": 2, "state": "Complete", **kw},
+    )  # fmt: skip
+
+
+def _spell(conn, mid, pid, balls, runs, wickets=0):
+    conn.execute(
+        "INSERT INTO bowling_performances (match_id, innings_no, player_id, team_id,"
+        " overs, balls, runs_conceded, wickets) VALUES (?, 1, ?, 2, ?, ?, ?, ?)",
+        (mid, pid, balls / 6, balls, runs, wickets),
+    )
+
+
+def _bat(conn, mid, pid, runs, balls=30, sr=None, innings=1, team=1):
+    conn.execute(
+        "INSERT INTO batting_performances (match_id, innings_no, player_id, team_id,"
+        " runs, balls_faced, strike_rate) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (mid, innings, pid, team, runs, balls, sr),
+    )
+
+
+def test_q14_needs_three_matches_with_full_four_over_spells(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1, 2, 3])
+        for mid in range(1, 5):
+            _match(conn, mid, venue=1)
+        _match(conn, 5, venue=2)
+        # P1: four full spells at the Oval (economies 6.0, 7.5, 9.0, 2.5) and one at
+        # the Park, which must not be added to the Oval figures.
+        for mid, runs, wkts in [(1, 24, 1), (2, 30, 2), (3, 36, 3), (4, 10, 0)]:
+            _spell(conn, mid, 1, 24, runs, wkts)
+        _spell(conn, 5, 1, 24, 10)
+        # P2: match 3 is only a 3-over spell, so just 2 qualifying matches remain.
+        for mid in (1, 2, 3):
+            _spell(conn, mid, 2, 24 if mid != 3 else 18, 20)
+        # P3: four spells of 5 overs at the Oval, economy 5.0.
+        for mid in (1, 2, 3, 4):
+            _spell(conn, mid, 3, 30, 25, 1)
+    rows = query_runner.run_query(14, db)["rows"]
+    assert rows == [
+        ("P3", "Oval", 4, 4, 5.0),
+        ("P1", "Oval", 4, 6, 6.25),  # equal matches: the lower economy ranks first
+    ]
+
+
+def _close_world(conn):
+    _basics(conn, players=[1, 2])
+    specs = [  # id, type, margin, winner
+        (1, "runs", 10, 1), (2, "wickets", 3, 2), (6, "runs", 49, 1),
+        (7, "runs", 50, 1), (3, "runs", 80, 1), (4, "wickets", 7, 1),
+    ]  # fmt: skip
+    for mid, vtype, margin, winner in specs:
+        _match(conn, mid, victory_type=vtype, victory_margin=margin, winner_id=winner)
+    for mid, runs in [(1, 50), (2, 30), (6, 70), (7, 400), (3, 200), (4, 150)]:
+        _bat(conn, mid, 1, runs)
+    for mid, runs in [(1, 10), (2, 10)]:
+        _bat(conn, mid, 2, runs)  # only 2 close matches: below the minimum of 3
+
+
+def test_q15_close_match_definition_minimum_and_wins(db):
+    with transaction(db) as conn:
+        _close_world(conn)
+    rows = query_runner.run_query(15, db)["rows"]
+    assert rows == [("P1", 50.0, 3, 2)]  # avg of 50, 30, 70; won matches 1 and 6
+    # margin 50 runs (not < 50), 80 runs, 7 wickets and everyone's other innings
+    # are not close; P2 has just 2 close matches
+
+
+def test_q16_yearly_trend_filters_year_and_match_count(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1])
+        years = {2025: 5, 2024: 4, 2019: 6}  # only 2025 qualifies
+        mid = 0
+        for year, n in years.items():
+            for k in range(n):
+                mid += 1
+                _match(conn, mid, date=f"{year}-0{k + 1}-10")
+                _bat(conn, mid, 1, 10 * (k + 1), sr=100 + 20 * k)
+    rows = query_runner.run_query(16, db)["rows"]
+    assert rows == [("P1", 2025, 5, 30.0, 140.0)]
+
+
+def test_q16_zero_ball_innings_do_not_drag_down_the_strike_rate(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1])
+        for k in range(5):
+            _match(conn, k + 1, date=f"2025-0{k + 1}-10")
+            _bat(
+                conn,
+                k + 1,
+                1,
+                10,
+                balls=0 if k == 0 else 10,
+                sr=0.0 if k == 0 else 100.0,
+            )
+    assert query_runner.run_query(16, db)["rows"][0][4] == 100.0
+
+
+def test_q17_toss_advantage_by_decision_with_overall(db):
+    with transaction(db) as conn:
+        _basics(conn)
+        games = [  # toss winner, decision, winner
+            (1, "bat", 1),
+            (1, "bat", 1),
+            (2, "bat", 1),
+            (1, "bat", 1),  # bat: 3 of 4
+            (1, "bowl", 1),
+            (2, "bowl", 1),  # bowl: 1 of 2
+            (1, "bat", None),  # draw: ignored
+        ]
+        for i, (toss, decision, winner) in enumerate(games, start=1):
+            _match(
+                conn, i, toss_winner_id=toss, toss_decision=decision, winner_id=winner
+            )
+        _match(conn, 50, winner_id=1)  # no toss recorded: ignored
+    assert query_runner.run_query(17, db)["rows"] == [
+        ("bat", 4, 3, 75.0),
+        ("bowl", 2, 1, 50.0),
+        ("overall", 6, 4, 66.7),
+    ]
+
+
+def test_q17_returns_nothing_instead_of_dividing_by_zero_when_no_data(db):
+    assert query_runner.run_query(17, db)["rows"] == []
+
+
+def test_q18_economy_thresholds_formats_and_weighting(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1, 2, 3, 4, 5])
+        for mid in range(1, 21):
+            _match(conn, mid, fmt="T20" if mid % 2 else "ODI")
+        for mid in range(1, 11):
+            _spell(conn, mid, 1, 12, 12, 1)  # P1: 10 matches x 2 overs, economy 6.0
+        for mid in range(1, 10):
+            _spell(conn, mid, 2, 24, 12)  # P2: only 9 matches
+        for mid in range(1, 11):
+            _spell(conn, mid, 3, 6, 6)  # P3: 1 over per match: below 2 on average
+        for mid in range(1, 13):
+            _spell(conn, mid, 4, 24, 18, 2)  # P4: 12 matches, economy 4.5
+        for mid in range(1, 21):
+            _match(conn, 100 + mid, fmt="TEST")
+            _spell(conn, 100 + mid, 5, 60, 20)  # P5: Tests only
+    rows = query_runner.run_query(18, db)["rows"]
+    assert rows == [
+        ("P4", 12, "48.0", 4.5, 24),
+        ("P1", 10, "20.0", 6.0, 10),
+    ]
+
+
+def test_q18_shows_overs_in_cricket_notation(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1])
+        for mid in range(1, 11):
+            _match(conn, mid, fmt="ODI")
+            _spell(conn, mid, 1, 23, 30)  # 3.5 overs each
+    assert query_runner.run_query(18, db)["rows"][0][2] == "38.2"  # 230 balls

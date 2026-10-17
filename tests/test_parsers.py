@@ -344,3 +344,35 @@ def test_profile_and_squad_agree_on_the_batting_style_spelling():
     assert profile["batting_style"] == "Left-hand bat"  # Khawaja: 'Left Handed Bat'
     squad = P.parse_team_players(load("teams_v1_players_2.json"))
     assert {p["batting_style"] for p in squad} == {"Right-hand bat", "Left-hand bat"}
+
+
+# ----------------------------------------- innings-level leaderboards (bug) ----
+HS_PAYLOAD = {
+    "filter": {"selectedMatchType": "test"},
+    "headers": ["Batter", "HS", "Balls", "SR", "Vs"],
+    "values": [
+        {"values": ["1", "Lara", "400*", "582", "68.7", "ENG"]},
+        {"values": ["2", "Hayden", "380", "437", "87.0", "ZIM"]},
+        {
+            "values": ["1", "Lara", "375", "538", "69.6", "ENG"]
+        },  # same man, lower innings
+        {"values": ["1", "Lara", "277", "403", "68.7", "AUS"]},
+    ],
+}
+
+
+def test_highest_score_keeps_each_players_best_innings_not_the_last_row():
+    out = P.parse_records_stats(HS_PAYLOAD, "highestScore", "1")
+    scores = {r["player_id"]: r["highest_score"] for r in out["rows"]}
+    assert scores == {1: 400, 2: 380}  # the old code stored 277 for Lara
+
+
+def test_innings_level_columns_never_become_career_columns():
+    out = P.parse_records_stats(HS_PAYLOAD, "highestScore", "1")
+    assert all(set(r) == {"player_id", "format", "highest_score"} for r in out["rows"])
+    assert "SR" in out["ignored"] and "Balls" in out["ignored"]  # one innings' rate
+
+
+def test_career_leaderboards_still_use_strike_rate():
+    out = P.parse_records_stats(load("stats_get-records_t20.json"), "mostRuns", "3")
+    assert out["rows"][0]["strike_rate"] == 128.02
