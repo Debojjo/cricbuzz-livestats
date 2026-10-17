@@ -263,3 +263,187 @@ def test_run_all_reports_every_query(db):
     results = query_runner.run_all(db)
     assert [r[0] for r in results][:8] == list(range(1, 9))
     assert all(r[1] >= 0 for r in results)  # no query raised an error
+
+
+# -------------------------------------------------------------- Q9 - Q13 ----
+def _career(conn, pid, fmt, **kw):
+    repo.upsert_career_stats(conn, {"player_id": pid, "format": fmt, **kw})
+
+
+def test_q9_allrounders_over_both_thresholds_with_strict_comparisons(db):
+    with transaction(db) as conn:
+        cases = [
+            (1, "Batting Allrounder", 5000, 100),  # qualifies
+            (2, "Allrounder", 1001, 51),  # just over both
+            (3, "All-rounder", 2000, 80),  # hand-typed spelling
+            (4, "Allrounder", 1000, 90),  # exactly 1000 runs: not more than
+            (5, "Allrounder", 3000, 50),  # exactly 50 wickets: not more than
+            (6, "Bowler", 4000, 200),  # wrong role
+            (7, None, 4000, 200),  # no role known
+        ]
+        for pid, role, runs, wkts in cases:
+            _player(conn, pid, f"P{pid}", playing_role=role)
+            _career(conn, pid, "ODI", runs=runs, wickets=wkts)
+        _career(conn, 1, "TEST", runs=1500, wickets=60)  # same player, second format
+    rows = query_runner.run_query(9, db)["rows"]
+    assert rows == [
+        ("P1", 1500, 60, "Test"),
+        ("P1", 5000, 100, "ODI"),
+        ("P3", 2000, 80, "ODI"),
+        ("P2", 1001, 51, "ODI"),
+    ]
+
+
+def _twenty_five_matches(conn):
+    repo.upsert_team(conn, {"team_id": 1, "team_name": "A"})
+    repo.upsert_team(conn, {"team_id": 2, "team_name": "B"})
+    repo.upsert_venue(conn, {"venue_id": 1, "venue_name": "Oval"})
+    for i in range(1, 26):
+        winner = None if i == 25 else (1 if i % 2 else 2)
+        repo.upsert_match(
+            conn,
+            {"match_id": i, "match_desc": f"M{i:02d}", "format": "ODI",
+             "match_date": f"2026-09-{i:02d}", "team1_id": 1, "team2_id": 2,
+             "venue_id": 1, "winner_id": winner, "state": "Complete",
+             "victory_type": "runs" if winner else "draw",
+             "victory_margin": 10 if winner else None},
+        )  # fmt: skip
+    repo.upsert_match(
+        conn,
+        {"match_id": 99, "match_desc": "LIVE", "format": "ODI",
+         "match_date": "2026-10-01", "team1_id": 1, "team2_id": 2,
+         "state": "In Progress"},
+    )  # fmt: skip
+
+
+def test_q10_exactly_the_20_newest_completed_matches(db):
+    with transaction(db) as conn:
+        _twenty_five_matches(conn)
+    result = query_runner.run_query(10, db)
+    descs = [r[0] for r in result["rows"]]
+    assert len(descs) == 20
+    assert descs[0] == "M25" and descs[-1] == "M06"  # newest first, M01-M05 cut
+    assert "LIVE" not in descs  # unfinished matches are not 'completed'
+    first = result["rows"][0]  # the draw
+    assert first[3] == "No winner" and first[5] == "draw"
+    assert result["rows"][1][3] in ("A", "B") and result["rows"][1][5] == "runs"
+    assert result["rows"][1][6] == "Oval"
+
+
+def test_q11_cross_format_runs_and_weighted_average(db):
+    with transaction(db) as conn:
+        _player(conn, 1, "Both Formats")
+        _career(conn, 1, "TEST", matches_played=70, runs=4288, innings=122, not_outs=5)
+        _career(conn, 1, "ODI", matches_played=101, runs=3541, innings=91, not_outs=22)
+        _player(conn, 2, "One Format")
+        _career(conn, 2, "ODI", matches_played=50, runs=2000, innings=50, not_outs=2)
+        _player(conn, 3, "Second Row Is Empty")
+        _career(conn, 3, "ODI", matches_played=50, runs=900, innings=50, not_outs=2)
+        _career(conn, 3, "T20", matches_played=0, runs=0)  # never played T20
+        _player(conn, 4, "Missing Not Outs")
+        _career(conn, 4, "ODI", matches_played=10, runs=500, innings=10, not_outs=1)
+        _career(
+            conn, 4, "T20", matches_played=10, runs=300, innings=10
+        )  # not_outs unknown
+    rows = {r[0]: r for r in query_runner.run_query(11, db)["rows"]}
+    assert set(rows) == {"Both Formats", "Missing Not Outs"}
+    both = rows["Both Formats"]
+    assert (both[1], both[2], both[3]) == (4288, 3541, None)  # no T20 row -> blank
+    assert both[4] == pytest.approx((4288 + 3541) / ((122 - 5) + (91 - 22)), abs=0.01)
+    assert both[5] == 2
+    assert rows["Missing Not Outs"][4] is None  # unknown beats wrong
+
+
+def test_q12_home_and_away_records(db):
+    with transaction(db) as conn:
+        for tid, name, country in [
+            (1, "A", "Aland"),
+            (2, "B", "Bland"),
+            (3, "C", "Cland"),
+        ]:
+            repo.upsert_team(
+                conn, {"team_id": tid, "team_name": name, "country": country}
+            )
+        repo.upsert_team(conn, {"team_id": 4, "team_name": "Club"})  # no country
+        for vid, country in [(1, "Aland"), (2, "Bland"), (3, "Zland"), (4, None)]:
+            repo.upsert_venue(
+                conn, {"venue_id": vid, "venue_name": f"V{vid}", "country": country}
+            )
+        games = [  # id, venue, team1, team2, winner, category
+            (1, 1, 1, 2, 1, "international"),
+            (2, 1, 1, 2, 2, "international"),
+            (3, 2, 1, 2, 1, "international"),
+            (4, 3, 1, 3, 3, "international"),
+            (5, 1, 1, 2, None, "international"),  # draw at A's home
+            (6, 1, 1, 2, 1, "domestic"),  # not international
+            (7, 4, 1, 2, 1, "international"),  # venue country unknown
+            (8, 1, 1, 4, 1, "international"),  # Club has no country
+        ]
+        for mid, vid, a, b, win, cat in games:
+            repo.upsert_match(
+                conn,
+                {"match_id": mid, "format": "T20", "venue_id": vid, "team1_id": a,
+                 "team2_id": b, "winner_id": win, "match_category": cat,
+                 "state": "Complete"},
+            )  # fmt: skip
+    rows = {r[0]: r[1:] for r in query_runner.run_query(12, db)["rows"]}
+    #            home: m, w, %      away: m, w, %
+    assert rows["A"] == (4, 2, 50.0, 2, 1, 50.0)  # draw counts as a match, not a win
+    assert rows["B"] == (1, 0, 0.0, 3, 1, 33.3)
+    assert rows["C"] == (0, 0, None, 1, 1, 100.0)  # never played at home: no percentage
+    assert "Club" not in rows  # a team without a country is left out, not an error
+
+
+def test_q12_teams_without_country_are_excluded(db):
+    with transaction(db) as conn:
+        repo.upsert_team(conn, {"team_id": 1, "team_name": "A", "country": "Aland"})
+        repo.upsert_team(conn, {"team_id": 2, "team_name": "Club"})
+        repo.upsert_venue(conn, {"venue_id": 1, "venue_name": "V", "country": "Aland"})
+        repo.upsert_match(
+            conn,
+            {"match_id": 1, "format": "T20", "venue_id": 1, "team1_id": 1,
+             "team2_id": 2, "winner_id": 1, "match_category": "international",
+             "state": "Complete"},
+        )  # fmt: skip
+    assert [r[0] for r in query_runner.run_query(12, db)["rows"]] == ["A"]
+
+
+def test_q13_only_consecutive_partnerships_of_100_or_more(db):
+    with transaction(db) as conn:
+        repo.upsert_team(conn, {"team_id": 1, "team_name": "A"})
+        repo.upsert_team(conn, {"team_id": 2, "team_name": "B"})
+        repo.upsert_match(
+            conn,
+            {"match_id": 1, "format": "ODI", "match_date": "2026-01-01",
+             "team1_id": 1, "team2_id": 2},
+        )  # fmt: skip
+        for pid in range(1, 8):
+            _player(conn, pid, f"Bat{pid}")
+            conn.execute(
+                "INSERT INTO batting_performances (match_id, innings_no, player_id,"
+                " team_id, batting_position, runs) VALUES (1, 1, ?, 1, ?, 10)",
+                (pid, pid),
+            )
+        pairs = [  # wicket, bat1, bat2, runs
+            (1, 1, 2, 120),  # positions 1-2, consecutive, qualifies
+            (2, 3, 4, 100),  # exactly 100, consecutive, qualifies
+            (3, 5, 6, 99),  # consecutive but too small
+            (4, 1, 3, 150),  # positions 1 and 3: NOT consecutive
+        ]
+        for wicket, a, b, runs in pairs:
+            conn.execute(
+                "INSERT INTO partnerships (match_id, innings_no, wicket_no, bat1_id,"
+                " bat2_id, runs) VALUES (1, 1, ?, ?, ?, ?)",
+                (wicket, a, b, runs),
+            )
+    rows = query_runner.run_query(13, db)["rows"]
+    assert [(r[0], r[1], r[2], r[3]) for r in rows] == [
+        ("Bat1", "Bat2", 120, 1),
+        ("Bat3", "Bat4", 100, 1),
+    ]
+
+
+def test_q10_reads_the_date_index_instead_of_sorting_everything(db):
+    plan = " ".join(query_runner.explain(10, db))
+    assert "idx_matches_date" in plan
+    assert "TEMP B-TREE FOR ORDER BY" not in plan  # index order is reused
