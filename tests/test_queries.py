@@ -20,10 +20,10 @@ def test_every_query_file_is_valid_sql_on_an_empty_database(db):
     files = sorted(query_runner.QUERY_DIR.glob("q*.sql"))
     assert files, "no query files found"
     for path in files:
-        number = int(path.name[1:3])
-        result = query_runner.run_query(number, db)
+        label = query_runner.label_of(path)
+        result = query_runner.run_query(label, db)
         assert result["rows"] == [] or isinstance(result["rows"], list)
-        assert query_runner.explain(number, db)
+        assert query_runner.explain(label, db)
 
 
 def test_query_runner_is_read_only(db):
@@ -262,7 +262,12 @@ def test_beginner_queries_use_their_indexes(db):
 def test_run_all_reports_every_query(db):
     results = query_runner.run_all(db)
     assert [r[0] for r in results][:8] == list(range(1, 9))
+    assert query_runner.label_of(query_runner.QUERY_DIR / "q22b_x.sql") == "22b"
     assert all(r[1] >= 0 for r in results)  # no query raised an error
+    labels = [r[0] for r in results]
+    assert len(labels) == len(set(labels))  # each query listed exactly once
+    assert "22b" in labels and "25b" in labels  # companions are separate entries
+    assert labels.index(22) + 1 == labels.index("22b")
 
 
 # -------------------------------------------------------------- Q9 - Q13 ----
@@ -432,7 +437,8 @@ def test_q13_only_consecutive_partnerships_of_100_or_more(db):
         ]
         for wicket, a, b, runs in pairs:
             conn.execute(
-                "INSERT INTO partnerships (match_id, innings_no, wicket_no, bat1_id,"
+                "INSERT INTO partnerships (match_id, innings_no, wicket_no,"
+                " bat1_id,"
                 " bat2_id, runs) VALUES (1, 1, ?, ?, ?, ?)",
                 (wicket, a, b, runs),
             )
@@ -618,3 +624,259 @@ def test_q18_shows_overs_in_cricket_notation(db):
             _match(conn, mid, fmt="ODI")
             _spell(conn, mid, 1, 23, 30)  # 3.5 overs each
     assert query_runner.run_query(18, db)["rows"][0][2] == "38.2"  # 230 balls
+
+
+# ------------------------------------------------------------- Q19 - Q25 ----
+def _innings(conn, mid, pid, runs, date, balls=30, sr=100.0, team=1, innings=1):
+    _match(conn, mid, date=date)
+    _bat(conn, mid, pid, runs, balls=balls, sr=sr, innings=innings, team=team)
+
+
+def test_q19_standard_deviation_filters_and_order(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1, 2, 3, 4, 5])
+        mid = 0
+        plans = {
+            1: [30] * 10,  # perfectly steady: sd 0
+            2: [10, 50] * 5,  # mean 30, sd 20
+            3: [30] * 9,  # only 9 innings
+            4: [30] * 10,  # steady, but 3 extra short innings must be ignored
+            5: [30] * 5,  # 5 recent innings + 5 from 2021 (too old)
+        }
+        for pid, runs_list in plans.items():
+            for i, runs in enumerate(runs_list):
+                mid += 1
+                old = pid == 5 and i >= 5
+                _innings(conn, mid, pid, runs, "2021-06-01" if old else "2024-06-01")
+        for k in range(3):
+            mid += 1
+            _innings(conn, mid, 4, 0, "2024-06-02", balls=5)  # under 10 balls faced
+    rows = query_runner.run_query(19, db)["rows"]
+    assert [(r[0], r[1], r[2], r[3]) for r in rows] == [
+        ("P1", 10, 30.0, 0.0),
+        ("P4", 10, 30.0, 0.0),
+        ("P2", 10, 30.0, 20.0),
+    ]
+
+
+def test_q20_pivot_and_the_20_match_minimum(db):
+    with transaction(db) as conn:
+        _player(conn, 1, "Two Formats")
+        _career(conn, 1, "TEST", matches_played=70, batting_avg=36.65)
+        _career(conn, 1, "ODI", matches_played=101, batting_avg=51.32)
+        _player(conn, 2, "Too Few")
+        _career(conn, 2, "ODI", matches_played=19, batting_avg=40.0)
+        _player(conn, 3, "T20 Only")
+        _career(conn, 3, "T20", matches_played=25, batting_avg=30.5)
+    assert query_runner.run_query(20, db)["rows"] == [
+        ("Two Formats", 70, 36.65, 101, 51.32, None, None, 171),
+        ("T20 Only", None, None, None, None, 25, 30.5, 25),
+    ]
+
+
+def test_q21_applies_the_formula_exactly_and_ranks_per_format(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1, 2, 3])
+        for mid in range(1, 7):
+            _match(conn, mid, fmt="ODI")
+        _match(conn, 7, fmt="TEST")
+        # P1 ODI batting: 5 innings, 100 runs, 4 dismissals, 125 balls
+        for mid, (runs, balls, out) in enumerate(
+            [(20, 25, 0), (30, 25, 0), (10, 25, 0), (40, 25, 0), (0, 25, 1)], start=1
+        ):
+            conn.execute(
+                "INSERT INTO batting_performances (match_id, innings_no, player_id,"
+                " team_id, runs, balls_faced, is_not_out) VALUES (?, 1, 1, 1, ?, ?, ?)",
+                (mid, runs, balls, out),
+            )
+        # P1 ODI bowling: 60 balls, 60 runs, 3 wickets; fielding 2 catches, 1 stumping
+        _spell(conn, 1, 1, 60, 60, 3)
+        conn.execute(
+            "INSERT INTO fielding_performances"
+            " (match_id, player_id, catches, stumpings)"
+            " VALUES (1, 1, 2, 1)"
+        )
+        # P2: only 4 innings, so no batting points; 3 catches = 9 points
+        for mid in range(1, 5):
+            _bat(conn, mid, 2, 100, balls=50)
+        conn.execute(
+            "INSERT INTO fielding_performances"
+            " (match_id, player_id, catches, stumpings)"
+            " VALUES (2, 2, 3, 0)"
+        )
+        conn.execute(  # a Test appearance must be ranked in its own format
+            "INSERT INTO fielding_performances"
+            " (match_id, player_id, catches, stumpings)"
+            " VALUES (7, 3, 1, 0)"
+        )
+    rows = query_runner.run_query(21, db)["rows"]
+    odi = [r for r in rows if r[0] == "ODI"]
+    # batting 100*.01 + 25*.5 + 80*.3 = 37.5 ; bowling 6 + 30*.5 + 0 = 21 ; fielding 6+5
+    assert odi[0] == ("ODI", 1, "P1", 37.5, 21.0, 11, 69.5)
+    assert odi[1] == ("ODI", 2, "P2", 0.0, 0.0, 9, 9.0)
+    assert [r for r in rows if r[0] == "Test"] == [("Test", 1, "P3", 0.0, 0.0, 3, 3.0)]
+
+
+def _days_back(n):
+    from datetime import date, timedelta
+
+    return (date.today() - timedelta(days=n)).isoformat()
+
+
+def _pair_world(conn):
+    for tid, name in [(1, "A"), (2, "B"), (3, "C")]:
+        repo.upsert_team(conn, {"team_id": tid, "team_name": name})
+    repo.upsert_venue(conn, {"venue_id": 1, "venue_name": "V1"})
+    repo.upsert_venue(conn, {"venue_id": 2, "venue_name": "V2"})
+    games = [  # id, venue, team1, team2, toss team, toss choice, winner, type, margin
+        (1, 1, 1, 2, 1, "bat", 1, "runs", 10),
+        (2, 1, 2, 1, 2, "bowl", 1, "wickets", 4),
+        (3, 1, 1, 2, 1, "bat", 2, "wickets", 6),
+        (4, 2, 1, 2, 2, "bat", 2, "runs", 30),
+        (5, 1, 1, 2, None, None, None, "draw", None),
+        (6, 2, 1, 2, 1, "bowl", 1, "wickets", 3),
+        (7, 1, 1, 2, 1, "bat", 1, "runs", 99),  # 4 years ago: outside the window
+        (8, 1, 1, 3, 1, "bat", 1, "runs", 5),  # only 1 match for pair A-C
+    ]
+    for mid, venue, t1, t2, toss, choice, winner, vtype, margin in games:
+        _match(
+            conn, mid, date=_days_back(1500 if mid == 7 else 10 + mid), venue=venue,
+            team1_id=t1, team2_id=t2, toss_winner_id=toss, toss_decision=choice,
+            winner_id=winner, victory_type=vtype, victory_margin=margin,
+        )  # fmt: skip
+
+
+def test_q22_head_to_head_summary_for_the_qualifying_pair(db):
+    with transaction(db) as conn:
+        _pair_world(conn)
+    rows = query_runner.run_query(22, db)["rows"]
+    assert len(rows) == 1  # A-C met once, and the 4-year-old match is ignored
+    #      A  B  matches a_w b_w  a%   b%   a_runs a_wkts b_runs b_wkts bat1 bowl1
+    assert rows[0] == ("A", "B", 6, 3, 2, 50.0, 33.3, 10.0, 3.5, 30.0, 6.0, 3, 2)
+
+
+def test_q22b_batting_first_vs_bowling_first_by_venue(db):
+    with transaction(db) as conn:
+        _pair_world(conn)
+    rows = {(r[0], r[2]): r[3:] for r in query_runner.run_query("22b", db)["rows"]}
+    #                 bat_m bat_w bowl_m bowl_w
+    assert rows[("A", "V1")] == (3, 2, 0, 0)
+    assert rows[("B", "V1")] == (0, 0, 3, 1)
+    assert rows[("A", "V2")] == (0, 0, 2, 1)
+    assert rows[("B", "V2")] == (2, 1, 0, 0)
+    assert len(rows) == 4
+
+
+def _form_innings(conn, base_mid, pid, runs_oldest_first, srs, start_days=100):
+    for i, (runs, sr) in enumerate(zip(runs_oldest_first, srs)):
+        mid = base_mid + i
+        _match(conn, mid, date=_days_back(start_days - i * 5))
+        _bat(conn, mid, pid, runs, balls=20, sr=sr)
+
+
+def test_q23_form_metrics_and_labels(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1, 2, 3, 4])
+        # P1: oldest five score 10 each (SR 100); newest five score 40-60 (SR 140)
+        _form_innings(
+            conn, 100, 1, [10] * 5 + [40, 60, 50, 50, 60], [100] * 5 + [140] * 5
+        )
+        # P2: steady 5 per innings -> poor form
+        _form_innings(conn, 200, 2, [5] * 10, [80] * 10)
+        # P3: only 9 innings -> not rated
+        _form_innings(conn, 300, 3, [50] * 9, [100] * 9)
+        # P4: 10 normal innings plus a newer 0-ball innings, which must be ignored
+        _form_innings(conn, 400, 4, [25] * 10, [90] * 10)
+        _match(conn, 450, date=_days_back(1))
+        _bat(conn, 450, 4, 0, balls=0, sr=0.0)
+    rows = {r[0]: r for r in query_runner.run_query(23, db)["rows"]}
+    assert set(rows) == {"P1", "P2", "P4"}
+    p1 = rows["P1"]
+    assert p1[1] == 52.0 and p1[2] == 31.0  # avg of last 5 and of last 10
+    assert p1[3] == 40.0  # strike rate 140 now vs 100 before
+    assert p1[4] == 4  # four scores of 50+ in the last ten
+    assert p1[5] == 30.1  # 100 - 100 * 21.66 / 31
+    assert p1[6] == "Excellent Form"
+    assert rows["P2"][6] == "Poor Form" and rows["P2"][5] == 100.0  # identical scores
+    assert rows["P4"][6] == "Average Form"  # 25 per innings, no 50s
+
+
+def test_q24_pair_statistics_and_rank(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1, 2, 3, 4, 5, 6])
+        plan = {  # wicket_no -> (bat1, bat2, [runs per match])
+            1: (1, 2, [60, 40, 55, 20, 100]),
+            2: (3, 4, [10, 20, 30, 40, 50]),
+            3: (5, 6, [90, 90, 90, 90]),  # only 4 partnerships
+            4: (1, 3, [200] * 5),  # positions 1 and 3: not consecutive
+        }
+        for mid in range(1, 6):
+            _match(conn, mid)
+            for pid in range(1, 7):
+                conn.execute(
+                    "INSERT INTO batting_performances (match_id, innings_no, player_id,"
+                    " team_id, batting_position, runs) VALUES (?, 1, ?, 1, ?, 10)",
+                    (mid, pid, pid),
+                )
+        for wicket, (a, b, runs_list) in plan.items():
+            for mid, runs in enumerate(runs_list, start=1):
+                conn.execute(
+                    "INSERT INTO partnerships (match_id, innings_no, wicket_no,"
+                    " bat1_id,"
+                    " bat2_id, runs) VALUES (?, 1, ?, ?, ?, ?)",
+                    (mid, wicket, a, b, runs),
+                )
+    rows = query_runner.run_query(24, db)["rows"]
+    assert rows == [
+        (1, "P1", "P2", 5, 55.0, 3, 100, 60.0),
+        (2, "P3", "P4", 5, 30.0, 0, 50, 0.0),  # exactly 50 does not exceed 50
+    ]
+
+
+def _quarter_start(back):
+    """A date in the calendar quarter `back` quarters before the previous one."""
+    from datetime import date
+
+    today = date.today()
+    quarter = (today.month - 1) // 3  # 0-3
+    index = today.year * 4 + quarter - 1 - back
+    year, q = divmod(index, 4)
+    return f"{year}-{q * 3 + 2:02d}-15"
+
+
+def _quarters(conn, base_mid, pid, averages, matches=3):
+    mid = base_mid
+    for i, avg in enumerate(averages):  # first value = oldest quarter
+        for _ in range(matches):
+            mid += 1
+            _match(conn, mid, date=_quarter_start(len(averages) - 1 - i))
+            _bat(conn, mid, pid, avg, balls=20, sr=100.0)
+
+
+def test_q25_career_phase_from_the_trend(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1, 2, 3, 4, 5])
+        _quarters(conn, 100, 1, [10, 15, 20, 25, 30, 35, 40, 45])  # climbing
+        _quarters(conn, 200, 2, [45, 40, 35, 30, 25, 20, 15, 10])  # falling
+        _quarters(conn, 300, 3, [30, 31, 30, 29, 30, 31, 30, 29])  # flat
+        _quarters(conn, 400, 4, [30] * 5)  # only 5 quarters
+        _quarters(conn, 500, 5, [30] * 6, matches=2)  # quarters too thin
+    rows = {r[0]: r for r in query_runner.run_query(25, db)["rows"]}
+    assert set(rows) == {"P1", "P2", "P3"}
+    assert rows["P1"][1] == 8 and rows["P1"][3] == 5.0  # +5 runs per quarter
+    assert rows["P1"][7] == "Career Ascending"
+    assert rows["P2"][3] == -5.0 and rows["P2"][7] == "Career Declining"
+    assert rows["P3"][7] == "Career Stable"
+    assert rows["P1"][4] == 7 and rows["P1"][5] == 0  # 7 improving steps of >10%
+
+
+def test_q25b_quarter_by_quarter_labels(db):
+    with transaction(db) as conn:
+        _basics(conn, players=[1])
+        _quarters(conn, 100, 1, [20, 30, 30, 25, 25, 10])
+    rows = query_runner.run_query("25b", db)["rows"]
+    assert [r[7] for r in rows] == [
+        "First quarter", "Improving", "Stable", "Declining", "Stable", "Declining",
+    ]  # fmt: skip
+    assert rows[1][6] == 50.0 and rows[5][6] == -60.0
+    assert [r[3] for r in rows] == [3] * 6

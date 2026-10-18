@@ -18,11 +18,20 @@ from utils.db_connection import get_connection
 QUERY_DIR = config.BASE_DIR / "sql" / "queries"
 
 
-def find_query_file(number: int) -> Path:
-    """sql/queries/q07_*.sql for number 7."""
-    matches = sorted(QUERY_DIR.glob(f"q{number:02d}_*.sql"))
+def _parse_label(label) -> tuple:
+    """7 -> (7, ''), '22b' -> (22, 'b')."""
+    match = re.fullmatch(r"(\d+)([a-z]?)", str(label).strip().lower())
+    if not match:
+        raise ValueError(f"not a query label: {label!r} (examples: 7, 22b)")
+    return int(match[1]), match[2]
+
+
+def find_query_file(label) -> Path:
+    """sql/queries/q07_*.sql for 7, sql/queries/q22b_*.sql for '22b'."""
+    number, part = _parse_label(label)
+    matches = sorted(QUERY_DIR.glob(f"q{number:02d}{part}_*.sql"))
     if not matches:
-        raise FileNotFoundError(f"no query file for Q{number} in {QUERY_DIR}")
+        raise FileNotFoundError(f"no query file for Q{label} in {QUERY_DIR}")
     return matches[0]
 
 
@@ -54,22 +63,26 @@ def explain(number: int, db_path: Optional[Path] = None) -> list:
         conn.close()
 
 
+def label_of(path: Path):
+    """q22b_x.sql -> '22b'; q07_x.sql -> 7."""
+    match = re.match(r"q(\d+)([a-z]?)_", path.name)
+    return int(match[1]) if not match[2] else f"{int(match[1])}{match[2]}"
+
+
 def run_all(db_path: Optional[Path] = None) -> list:
-    """Run every query file once. Returns [(number, rows, seconds, first plan line)]."""
+    """Run every query file once: [(label, rows, seconds, first plan line)]."""
     import time
 
     results = []
     for path in sorted(QUERY_DIR.glob("q*.sql")):
-        number = int(path.name[1:3])
+        label = label_of(path)
         started = time.perf_counter()
         try:
-            rows = len(run_query(number, db_path)["rows"])
-            plan = explain(number, db_path)
-            results.append((number, rows, time.perf_counter() - started, plan[0]))
-        except (
-            Exception
-        ) as exc:  # report every failure instead of stopping at the first
-            results.append((number, -1, time.perf_counter() - started, f"ERROR: {exc}"))
+            rows = len(run_query(label, db_path)["rows"])
+            plan = explain(label, db_path)[0]
+        except Exception as exc:  # report every failure, do not stop at the first
+            rows, plan = -1, f"ERROR: {exc}"
+        results.append((label, rows, time.perf_counter() - started, plan))
     return results
 
 
@@ -92,16 +105,16 @@ def format_table(columns: list, rows: list, limit: Optional[int] = None) -> str:
 def main() -> None:
     """Command-line entry point."""
     parser = argparse.ArgumentParser(description="Run an analytics query.")
-    parser.add_argument("number", type=int, nargs="?", help="question number, 1-25")
+    parser.add_argument("number", nargs="?", help="question, e.g. 7 or 22b")
     parser.add_argument("--all", action="store_true", help="run every query, summary")
     parser.add_argument("--plan", action="store_true", help="show the execution plan")
     parser.add_argument("--limit", type=int, default=None, help="rows to print")
     args = parser.parse_args()
 
     if args.all:
-        print("\nQ  | rows  | seconds | first step of the plan")
+        print("\nQ   | rows  | seconds | first step of the plan")
         for number, rows, seconds, plan in run_all():
-            print(f"Q{number:<2}| {rows:>5} | {seconds:>7.3f} | {plan}")
+            print(f"Q{str(number):<3}| {rows:>5} | {seconds:>7.3f} | {plan}")
         return
     if args.number is None:
         parser.error("give a question number, or use --all")

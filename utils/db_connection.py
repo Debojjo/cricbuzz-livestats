@@ -6,12 +6,20 @@ in one spot: foreign-key enforcement, row format, and the choice of database
 ``database/schema.sql`` only).
 """
 
+import math
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional, Sequence
 
 import config
+
+
+def _sqrt(value):
+    """SQL SQRT(): NULL in, NULL out; tiny negative rounding noise becomes 0."""
+    if value is None:
+        return None
+    return math.sqrt(max(float(value), 0.0))
 
 
 def get_connection(
@@ -37,6 +45,9 @@ def get_connection(
 
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Not every SQLite build has SQRT; defining it here makes the standard-deviation
+    # queries (Q19, Q23) behave the same on every machine.
+    conn.create_function("SQRT", 1, _sqrt, deterministic=True)
     return conn
 
 
