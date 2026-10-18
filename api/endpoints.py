@@ -7,6 +7,7 @@ only file that needs to change.
 """
 
 MATCHES_RECENT = "matches/v1/recent"
+MATCHES_LIVE = "matches/v1/live"  # URL pattern assumed from MATCHES_RECENT; verify
 MATCH_INFO = "mcenter/v1/{matchId}"
 SCORECARD = "mcenter/v1/{matchId}/scard"
 PLAYER_INFO = "stats/v1/player/{playerId}"

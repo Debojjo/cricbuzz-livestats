@@ -1,7 +1,9 @@
 [flake8]
 max-line-length = 88
 exclude = venv,.venv,__pycache__
-# One-line SQL strings are clearer unwrapped in the report and in SQL-heavy tests.
+# One-line SQL strings and Streamlit text are clearer unwrapped.
 per-file-ignores =
     data/coverage_report.py:E501
     tests/test_seed.py:E501
+    main.py:E501
+    pages/*.py:E501
