@@ -4,9 +4,11 @@ import streamlit as st
 
 from api.cricbuzz_client import ApiError, CricbuzzClient
 from services import match_service, stats_service
-from utils.ui import database_ready, sample_toggle, setup_page
+from utils.ui import database_ready, sample_toggle, setup_page, site_footer
 
-setup_page("Live Matches", "📺")
+setup_page(
+    "Live Matches", "📺", "Live feed on demand, plus saved results with full scorecards"
+)
 include_sample = sample_toggle("live_include_sample", default=False)
 if not database_ready():
     st.stop()
@@ -59,13 +61,38 @@ with tab_recent:
     if not results:
         st.info("No completed matches stored yet.")
     else:
+
+        def pick(index):
+            st.session_state["recent_pick"] = index
+
+        st.markdown("##### Latest results")
+        for start in range(0, min(len(results), 6), 3):
+            for offset, column in enumerate(st.columns(3)):
+                index = start + offset
+                if index >= len(results):
+                    break
+                card = results[index]
+                with column.container(border=True):
+                    st.markdown(f"**{card['team1_name']} v {card['team2_name']}**")
+                    st.caption(f"{card['match_date']} · {card['format']}")
+                    st.markdown(card["status"] or "")
+                    st.button(
+                        "View scorecard",
+                        key=f"card_{index}",
+                        on_click=pick,
+                        args=(index,),
+                    )
+
         labels = [
             f"{r['match_date']} - {r['team1_name']} v {r['team2_name']} "
             f"({r['match_desc'] or r['format']})"
             for r in results
         ]
         choice = st.selectbox(
-            "Result", range(len(results)), format_func=labels.__getitem__
+            "Result",
+            range(len(results)),
+            format_func=labels.__getitem__,
+            key="recent_pick",
         )
         row = results[choice]
         st.subheader(f"{row['team1_name']} v {row['team2_name']}")
@@ -91,3 +118,5 @@ with tab_recent:
             st.dataframe(card["bowling"], hide_index=True)
             with st.expander("Partnerships"):
                 st.dataframe(card["partnerships"], hide_index=True)
+
+site_footer()

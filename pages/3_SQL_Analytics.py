@@ -4,9 +4,13 @@ import plotly.express as px
 import streamlit as st
 
 from services import analytics_service
-from utils.ui import database_ready, sample_toggle, setup_page
+from utils.ui import database_ready, sample_toggle, setup_page, site_footer
 
-setup_page("SQL Analytics", "🔍")
+setup_page(
+    "SQL Analytics",
+    "🔍",
+    "27 analytical queries on the cricket database, plus a safe query box",
+)
 include_sample = sample_toggle("analytics_include_sample", default=True)
 if not database_ready():
     st.stop()
@@ -61,9 +65,23 @@ tab_numbered, tab_custom = st.tabs(["The questions", "Your own query"])
 
 with tab_numbered:
     queries = analytics_service.list_queries()
-    names = {
-        q["label"]: f"Q{q['label']} - {q['level']} - {q['title']}" for q in queries
-    }
+    f_level, f_search = st.columns([2, 3])
+    level = f_level.radio(
+        "Level", ["All", "Beginner", "Intermediate", "Advanced"], horizontal=True
+    )
+    word = f_search.text_input(
+        "Search the questions", placeholder="e.g. toss, partnership, economy"
+    )
+    shown = [
+        q
+        for q in queries
+        if (level == "All" or q["level"] == level)
+        and word.lower() in q["title"].lower()
+    ]
+    if not shown:
+        st.info("No question matches that filter.")
+        st.stop()
+    names = {q["label"]: f"Q{q['label']} - {q['level']} - {q['title']}" for q in shown}
     label = st.selectbox("Question", list(names), format_func=names.get)
     with st.expander("About this query", expanded=True):
         st.text(analytics_service.describe(label))
@@ -107,3 +125,5 @@ with tab_custom:
     with st.expander("Tables and columns you can query"):
         for table, columns in analytics_service.schema_overview().items():
             st.markdown(f"**{table}**: " + ", ".join(columns))
+
+site_footer()

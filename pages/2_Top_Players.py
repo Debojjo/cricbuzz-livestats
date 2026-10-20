@@ -5,9 +5,9 @@ import streamlit as st
 
 from api.cricbuzz_client import ApiError, CricbuzzClient
 from services import player_service, stats_service
-from utils.ui import database_ready, setup_page
+from utils.ui import database_ready, setup_page, site_footer
 
-setup_page("Top Players", "🏆")
+setup_page("Top Players", "🏆", "Leaderboards from stored career statistics")
 if not database_ready():
     st.stop()
 
@@ -24,6 +24,19 @@ if table.empty:
     )
 else:
     value_label = category.split(" (")[0]
+    for column, medal, (_, leader) in zip(
+        st.columns(3), ("🥇", "🥈", "🥉"), table.head(3).iterrows()
+    ):
+        value = leader["value"]
+        shown = (
+            f"{value:,.2f}"
+            if isinstance(value, float) and value != int(value)
+            else f"{int(value):,}"
+        )
+        with column.container(border=True):
+            st.caption(f"{medal} Rank {leader['rank']}")
+            st.markdown(f"**{leader['player']}**")
+            st.metric(value_label, shown)
     chart_data = table.sort_values("value")
     figure = px.bar(
         chart_data,
@@ -60,3 +73,5 @@ with st.expander("Refresh this leaderboard from the Cricbuzz API"):
                 st.success(f"Updated {outcome['players']} players.")
             except ApiError as exc:
                 st.error(f"Could not refresh: {exc}")
+
+site_footer()

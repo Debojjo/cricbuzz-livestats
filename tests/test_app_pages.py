@@ -58,10 +58,20 @@ def test_every_page_explains_a_missing_database(tmp_path, monkeypatch):
         assert any("database was not found" in e.value for e in at.error)
 
 
-def test_home_shows_counts_and_the_sample_data_notice(app_db):
+def test_home_shows_the_hero_kpis_features_and_the_sample_data_notice(app_db):
     at = open_page("home")
-    assert at.title[0].value.endswith("Cricbuzz LiveStats")
-    assert at.metric and any("Matches" == m.label for m in at.metric)
+    assert not at.exception
+    assert any(
+        "Cricbuzz LiveStats" in m.value and "hero" in m.value for m in at.markdown
+    )
+    labels = {m.label for m in at.metric}
+    assert {
+        "Real matches",
+        "Players",
+        "Analytics queries",
+        "API requests left",
+    } <= labels
+    assert any("Latest results" in s.value for s in at.subheader)
     assert any("Real vs sample data" in i.value for i in at.info)
 
 
@@ -76,6 +86,38 @@ def test_live_page_recent_results_work_offline(app_db):
     at = open_page("live")
     assert not at.exception
     assert any(s.label == "Result" for s in at.selectbox)
+
+
+def test_players_page_shows_a_podium_for_the_leaders(app_db):
+    at = open_page("players")  # default: Most runs, ODI -> the fixture player
+    assert not at.exception
+    assert any("3,541" in m.value for m in at.metric)
+
+
+def test_live_results_are_shown_as_cards_with_a_scorecard_button(app_db):
+    at = open_page("live")
+    cards = [b for b in at.button if b.label == "View scorecard"]
+    assert len(cards) >= 1
+    cards[-1].click()
+    at.run()
+    assert not at.exception
+    assert at.session_state["recent_pick"] == len(cards) - 1
+
+
+def test_sql_page_filters_questions_by_level_and_search(app_db):
+    at = open_page("sql")
+    all_options = list(at.selectbox[0].options)
+    assert len(all_options) == 27
+    at.radio[0].set_value("Advanced").run()
+    advanced = list(at.selectbox[0].options)
+    assert 0 < len(advanced) < 27 and all("Advanced" in o for o in advanced)
+    at.radio[0].set_value("All").run()
+    at.text_input[0].set_value("toss").run()
+    assert list(at.selectbox[0].options) == [
+        o for o in all_options if "toss" in o.lower()
+    ]
+    at.text_input[0].set_value("zzzz-no-such-question").run()
+    assert not at.exception and any("No question matches" in i.value for i in at.info)
 
 
 def test_players_page_draws_a_chart_or_explains_why_not(app_db):

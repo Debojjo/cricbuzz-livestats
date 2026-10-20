@@ -7,9 +7,9 @@ import streamlit as st
 
 import config
 from services import stats_service
-from utils.ui import database_ready, setup_page
+from utils.ui import database_ready, setup_page, site_footer
 
-setup_page("Settings", "⚙️")
+setup_page("Settings", "⚙️", "API quota, data volume and the known limits of the data")
 if not database_ready():
     st.stop()
 
@@ -60,3 +60,5 @@ st.write(
         ),
     }
 )
+
+site_footer()

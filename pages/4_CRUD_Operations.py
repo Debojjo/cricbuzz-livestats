@@ -6,10 +6,10 @@ import streamlit as st
 
 from services import crud_service as crud
 from services import match_service
-from utils.ui import database_ready, setup_page, show_validation_errors
+from utils.ui import database_ready, setup_page, show_validation_errors, site_footer
 from utils.validators import BATTING_STYLES, ROLES, ValidationError
 
-setup_page("CRUD Operations", "🛠️")
+setup_page("CRUD Operations", "🛠️", "Manage players and batting entries safely")
 if not database_ready():
     st.stop()
 
@@ -205,3 +205,5 @@ with tab_batting:
         )
         if st.button("Delete entry", disabled=not confirm_entry):
             run_action(lambda: crud.delete_batting(entry_id), "Entry deleted.")
+
+site_footer()
