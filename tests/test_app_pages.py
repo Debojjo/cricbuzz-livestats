@@ -13,7 +13,7 @@ from database.init_db import init_db
 from utils.db_connection import transaction
 
 PAGES = {
-    "home": "main.py",
+    "home": "views/home.py",
     "live": "pages/1_Live_Matches.py",
     "players": "pages/2_Top_Players.py",
     "sql": "pages/3_SQL_Analytics.py",
@@ -186,3 +186,10 @@ def test_pages_folder_holds_only_page_scripts():
     names = sorted(p.name for p in (BASE_DIR / "pages").glob("*.py"))
     expected = sorted(Path(v).name for k, v in PAGES.items() if k != "home")
     assert names == expected
+
+
+def test_main_router_shows_the_home_page_with_friendly_navigation(app_db):
+    at = AppTest.from_file(str(BASE_DIR / "main.py"), default_timeout=60).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Cricbuzz LiveStats" in m.value for m in at.markdown)
+    assert {m.label for m in at.metric} >= {"Real matches", "API requests left"}

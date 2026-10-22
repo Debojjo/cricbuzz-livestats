@@ -24,6 +24,12 @@ DB_PATH = _resolve_path(os.getenv("DB_PATH", "data/cricbuzz.db"))
 SCHEMA_FILE = BASE_DIR / "database" / "schema.sql"
 VIEWS_FILE = BASE_DIR / "database" / "views.sql"
 
+# --- Deployment ------------------------------------------------------------------
+# On a fresh host (for example Streamlit Community Cloud) there is no database file.
+# With AUTO_SETUP=1 the app creates one on first start: it copies the committed
+# snapshot (data/snapshot/cricbuzz_snapshot.db) or, failing that, builds a demo.
+AUTO_SETUP = os.getenv("AUTO_SETUP", "0") == "1"
+
 # --- CRUD safety ---------------------------------------------------------------
 # Real API rows (is_sample = 0) are read-only in the CRUD module unless this is
 # switched on. Rows created by hand or by the sample generator can be edited.

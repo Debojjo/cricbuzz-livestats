@@ -46,6 +46,7 @@ else:
         text="value",
         labels={"value": value_label, "player": ""},
         title=f"{category} - {format_label}",
+        color_discrete_sequence=["#0b6b3a"],
     )
     figure.update_layout(height=max(320, 32 * len(table) + 120))
     st.plotly_chart(figure)

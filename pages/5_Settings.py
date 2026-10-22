@@ -50,15 +50,18 @@ st.markdown("""
 """)
 
 st.subheader("About")
-st.write(
-    {
-        "Database": str(config.DB_PATH.name),
-        "Python": sys.version.split()[0],
-        "Streamlit": st.__version__,
-        "Real-edit protection": (
-            "off" if not config.CRUD_ALLOW_EDIT_REAL else "ON (real rows editable)"
-        ),
-    }
+st.table(
+    pd.DataFrame(
+        {
+            "Item": ["Database", "Python", "Streamlit", "Real-edit protection"],
+            "Value": [
+                config.DB_PATH.name,
+                sys.version.split()[0],
+                st.__version__,
+                "off" if not config.CRUD_ALLOW_EDIT_REAL else "ON (real rows editable)",
+            ],
+        }
+    )
 )
 
 site_footer()

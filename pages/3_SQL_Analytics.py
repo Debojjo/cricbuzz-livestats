@@ -33,7 +33,10 @@ def show_chart(df, key):
         return
     value = st.selectbox("Chart this column", numeric, key=f"{key}_col")
     top = df.head(25)
-    st.plotly_chart(px.bar(top, x=labels[0], y=value), key=f"{key}_chart")
+    st.plotly_chart(
+        px.bar(top, x=labels[0], y=value, color_discrete_sequence=["#0b6b3a"]),
+        key=f"{key}_chart",
+    )
 
 
 def show_result(result, name, key):

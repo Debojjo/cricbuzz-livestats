@@ -2,6 +2,7 @@
 
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 
 from services import crud_service as crud
@@ -20,6 +21,11 @@ st.caption(
     "Create always works and flags the new row as manual. Update and Delete work on "
     "manual and sample rows only: real Cricbuzz rows are protected."
 )
+
+
+def table(rows):
+    """Rows as a DataFrame with blanks instead of the word None."""
+    return pd.DataFrame(rows).fillna("")
 
 
 def run_action(action, success_message):
@@ -55,7 +61,7 @@ with tab_players:
         search=search or None, source=source, limit=20, offset=(page - 1) * 20
     )
     st.caption(f"{found['total']:,} players match. Showing page {page}.")
-    st.dataframe(found["rows"], hide_index=True, column_order=[
+    st.dataframe(table(found["rows"]), hide_index=True, column_order=[
         "player_id", "full_name", "country", "playing_role", "batting_style", "bowling_style", "source",
     ])  # fmt: skip
 
@@ -133,7 +139,7 @@ with tab_batting:
     )
     entries = crud.list_batting(match_id=match_id, limit=100)
     st.caption(f"{entries['total']} batting entries in this match.")
-    st.dataframe(entries["rows"], hide_index=True, column_order=[
+    st.dataframe(table(entries["rows"]), hide_index=True, column_order=[
         "performance_id", "innings_no", "team_name", "batting_position", "player_name",
         "runs", "balls_faced", "fours", "sixes", "source",
     ])  # fmt: skip

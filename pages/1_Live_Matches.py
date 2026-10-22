@@ -97,13 +97,12 @@ with tab_recent:
         row = results[choice]
         st.subheader(f"{row['team1_name']} v {row['team2_name']}")
         st.write(f"**{row['status']}**")
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2 = st.columns(2)
         c1.metric("Format", row["format"])
         c2.metric("Date", row["match_date"] or "-")
-        c3.metric("Winner", row["winner_name"] or "No winner")
-        c4.metric(
-            "Venue",
-            ", ".join(x for x in (row["venue_name"], row["venue_city"]) if x) or "-",
+        venue = ", ".join(x for x in (row["venue_name"], row["venue_city"]) if x) or "-"
+        st.markdown(
+            f"**Winner:** {row['winner_name'] or 'No winner'} · **Venue:** {venue}"
         )
         card = match_service.stored_scorecard(row["match_id"], include_sample)
         if card["batting"].empty:

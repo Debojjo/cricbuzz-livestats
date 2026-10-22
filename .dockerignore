@@ -1,0 +1,9 @@
+venv/
+.venv/
+__pycache__/
+.git/
+.env
+data/raw/
+data/cricbuzz.db
+logs/
+.pytest_cache/
